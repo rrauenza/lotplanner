@@ -1,0 +1,3 @@
+# Vendored agent skills. Not committed — restored from skills-lock.json:
+#   npx skills@latest experimental_install
+.agents/
