@@ -5,11 +5,11 @@ Reviewing whether vehicles fit a real place, by laying out scaled vehicle footpr
 ## Language
 
 **Site**:
-The real-world place a Layout applies to.
-_Avoid_: location, lot
+The real-world place a Layout applies to — any space vehicles are placed in, marked or not.
+_Avoid_: location, lot, parking lot
 
 **Site Frame**:
-The oriented rectangle that defines a Site's working area and the axes its Placements snap to.
+The oriented rectangle marking a Site's working area and defining the axes its Placements snap to. A guide only — it never confines a Placement.
 _Avoid_: boundary, grid, bounding box
 
 **Vehicle**:
