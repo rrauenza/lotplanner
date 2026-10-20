@@ -8,6 +8,10 @@ Reviewing whether vehicles fit a real place, by laying out scaled vehicle footpr
 The real-world place a Layout applies to.
 _Avoid_: location, lot
 
+**Site Frame**:
+The oriented rectangle that defines a Site's working area and the axes its Placements snap to.
+_Avoid_: boundary, grid, bounding box
+
 **Vehicle**:
 A named vehicle type with a width, a length and a colour. A single Vehicle may describe a combination, such as a pickup towing a trailer.
 _Avoid_: car, unit, asset
