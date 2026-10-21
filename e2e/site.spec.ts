@@ -101,6 +101,22 @@ test('draws the photograph at true scale, and credits it', async ({ page }) => {
   await expect(page.getByText(ATTRIBUTION)).toBeVisible()
 })
 
+test('gives the photograph the whole width', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  // A guard against a stylesheet capping the map. A leftover global max-width
+  // once held it to 608 px of a 1000 px viewport, and nothing else in this
+  // suite could see it, because the component's own rule looked complete.
+  const map = await page.locator('.leaflet-container').boundingBox()
+  const viewport = page.viewportSize()
+
+  expect(map).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect((map?.width ?? 0) / (viewport?.width ?? 1)).toBeGreaterThan(0.9)
+})
+
 test('says it is fetching, because the first fetch is slow', async ({ page }) => {
   await serveImagery(page, { delayMs: 700 })
   await openTheSite(page)

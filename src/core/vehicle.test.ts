@@ -1,0 +1,54 @@
+import { describe, expect, it } from 'vitest'
+
+import { vehicle, type VehicleInput } from './vehicle'
+
+function make(overrides: Partial<VehicleInput> = {}): ReturnType<typeof vehicle> {
+  return vehicle({
+    name: 'Ford Explorer',
+    widthInches: 79,
+    lengthInches: 199,
+    colour: '#3b82f6',
+    ...overrides,
+  })
+}
+
+describe('vehicle', () => {
+  it('collapses a name that was typed sloppily', () => {
+    expect(make({ name: '  Ford   Explorer  ' }).name).toBe('Ford Explorer')
+  })
+
+  it('removes control characters rather than letting them pass as whitespace', () => {
+    // Removed, not turned into a space, so a name cannot be split in two by one.
+    expect(make({ name: 'Ford\u0007Explorer' }).name).toBe('FordExplorer')
+    // A real space beside one is kept, though.
+    expect(make({ name: 'Ford\u0000 Explorer' }).name).toBe('Ford Explorer')
+  })
+
+  it('composes a name, so two that look identical are identical', () => {
+    // A combining acute is a different string from a composed one.
+    expect(make({ name: 'Cafe\u0301' }).name).toBe('Caf\u00e9')
+  })
+
+  it('refuses a name that is empty, or longer than a name needs to be', () => {
+    expect(() => make({ name: '   ' })).toThrow()
+    expect(() => make({ name: 'x'.repeat(65) })).toThrow()
+  })
+
+  it('takes a short label, or as much of the name as a rectangle can carry', () => {
+    expect(make({ shortLabel: ' SUV ' }).shortLabel).toBe('SUV')
+    expect(make({ name: 'Semi + 53 ft trailer' }).shortLabel).toBe('Semi + 53 ft')
+    expect(() => make({ shortLabel: 'thirteen char' })).toThrow()
+  })
+
+  it('reads a colour in any of the three shapes it is written in', () => {
+    expect(make({ colour: '#abc' }).colour).toBe(0xaabbcc)
+    expect(make({ colour: '#3b82f6' }).colour).toBe(0x3b82f6)
+    expect(make({ colour: '0x3B82F6' }).colour).toBe(0x3b82f6)
+    expect(() => make({ colour: 'blue' })).toThrow()
+  })
+
+  it('refuses a dimension that is not a whole positive number of inches', () => {
+    expect(() => make({ widthInches: 0 })).toThrow()
+    expect(() => make({ lengthInches: 199.5 })).toThrow()
+  })
+})
