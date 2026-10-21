@@ -1,0 +1,50 @@
+# The hooks are `repo: local` entries invoking the project's own tooling, so
+# that every version is pinned once in the lockfile rather than a second time in
+# hook configuration. They need `node_modules` to exist, and they are invoked by
+# path rather than through a package manager, so they behave the same whether
+# you installed with Yarn, npm, or anything else.
+#
+# Hooks fix rather than report wherever their tool can. `prettier --write` and
+# `eslint --fix` repair the file and hand it back to be re-added. `tsc` and
+# `svelte-check` have no fix mode, so they are checks: what they find is a
+# mistake rather than a style choice.
+#
+#   pre-commit install              # once per clone
+#   pre-commit run --all-files      # run them all now
+repos:
+  - repo: local
+    hooks:
+      - id: typecheck-app
+        name: typecheck (tsc --noEmit)
+        entry: node_modules/.bin/tsc --noEmit -p tsconfig.app.json
+        language: system
+        files: \.(ts|js|svelte)$
+        pass_filenames: false
+
+      - id: typecheck-node
+        name: typecheck (config and end-to-end tests)
+        entry: node_modules/.bin/tsc --noEmit -p tsconfig.node.json
+        language: system
+        files: \.(ts|js)$
+        pass_filenames: false
+
+      - id: svelte-check
+        name: typecheck (Svelte components)
+        entry: node_modules/.bin/svelte-check --tsconfig ./tsconfig.app.json
+        language: system
+        files: \.svelte$
+        pass_filenames: false
+
+      - id: eslint
+        name: eslint (fixes)
+        entry: node_modules/.bin/eslint --fix
+        language: system
+        files: \.(ts|js|svelte)$
+
+      # Prettier also strips trailing whitespace and inserts the final newline,
+      # so neither of those needs a hook of its own.
+      - id: prettier
+        name: prettier (writes)
+        entry: node_modules/.bin/prettier --write --ignore-unknown
+        language: system
+        files: \.(ts|js|svelte|css|html|json|ya?ml|md)$

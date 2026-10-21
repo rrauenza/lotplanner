@@ -1,3 +1,21 @@
 # Vendored agent skills. Not committed — restored from skills-lock.json:
 #   npx skills@latest experimental_install
 .agents/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test output
+playwright-report/
+test-results/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+*.local
+*.suo
+*.sw?

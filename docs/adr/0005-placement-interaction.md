@@ -33,7 +33,7 @@ The Site Frame supplies the axes that north cannot.
   adjustment is tedious when placing dozens.
 - **North-relative angle snapping.** Rejected for the reason above.
 - **A per-Layout frame drawn in-app, or rotating the map view.** Rejected: the frame is a property
-  of the *place*, so it belongs to the Site; and Leaflet has no map bearing, so view rotation would
+  of the _place_, so it belongs to the Site; and Leaflet has no map bearing, so view rotation would
   reopen ADR 0001's library choice to buy readability rather than to fix snapping.
 
 ## Consequences
