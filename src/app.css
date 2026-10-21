@@ -1,3 +1,11 @@
+/*
+ * The base the app sits on, and nothing more.
+ *
+ * Layout belongs to the component that owns it, because a max-width here
+ * silently capped the map earlier and looked like a bug in the map. What
+ * remains is the type and colour scheme that everything inherits.
+ */
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
@@ -6,20 +14,4 @@
 
 body {
   margin: 0;
-}
-
-main {
-  margin: 0 auto;
-  max-width: 40rem;
-  padding: 2rem 1rem;
-}
-
-h1 {
-  font-size: 1.75rem;
-  margin: 0 0 0.5rem;
-}
-
-.status {
-  color: color-mix(in srgb, currentcolor 60%, transparent);
-  font-size: 0.875rem;
 }
