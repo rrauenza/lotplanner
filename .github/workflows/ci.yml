@@ -25,10 +25,13 @@ jobs:
           node-version-file: .nvmrc
           cache: yarn
 
-      # `setup-node` guarantees Node and npm, not Yarn, so Yarn is ensured here
-      # rather than assumed from the runner image.
+      # `setup-node` guarantees Node and npm, but not Yarn, and `packageManager`
+      # in package.json is the one place the Yarn version is written down.
       - name: Ensure Yarn
-        run: yarn --version || npm install --global yarn@1.22.22
+        run: |
+          if ! command -v yarn >/dev/null 2>&1; then
+            npm install --global "$(node --print 'require("./package.json").packageManager')"
+          fi
 
       - name: Install
         run: yarn install --frozen-lockfile
@@ -52,9 +55,10 @@ jobs:
         run: yarn test:e2e
 
       # The same hooks a contributor gets locally, so the hook configuration
-      # cannot rot unnoticed.
+      # cannot rot unnoticed. The runner is pinned, because an unpinned one is a
+      # version nobody chose.
       - name: Pre-commit hooks
-        run: pipx run pre-commit run --all-files
+        run: pipx run --spec pre-commit==4.7.0 pre-commit run --all-files
 
       - name: Build
         run: yarn build
@@ -85,12 +89,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # `enablement` lets the workflow turn Pages on for the repository itself,
-      # so the first push after this lands deploys without a manual step.
+      # Pages has to be switched on once, by someone with repository admin:
+      # Settings, Pages, Source: GitHub Actions. The workflow token cannot do
+      # it, whatever this action's `enablement` option would suggest.
       - name: Configure Pages
         uses: actions/configure-pages@v6
-        with:
-          enablement: true
 
       - name: Deploy to Pages
         id: deployment

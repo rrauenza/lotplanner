@@ -4,7 +4,7 @@ Can these vehicles fit in this space?
 
 A static web app with no login and nothing to install. Pick a place from a short list, and its aerial
 photograph fills the screen at true scale, showing the space in its wider surroundings. Drag vehicles
-from a library at their real sizes, rotate them to match the space's actual orientation, and see
+from the palette at their real sizes, rotate them to match the space's actual orientation, and see
 whether they fit.
 
 ## Status
@@ -52,13 +52,20 @@ or randomness. End-to-end tests drive real touch events in a real browser, becau
 the riskiest surface and a pure core cannot test a gesture. Leaflet's own rendering, the storage
 adapters, and the real network calls are deliberately untested.
 
+Neither seam has much to chew on yet. The unit test currently only proves the runner is connected,
+and the end-to-end test proves the built app is served from its subpath; both start earning their
+keep with the first feature ticket.
+
 **The base path is `/lotplanner/`,** because GitHub Pages serves this from a repository subpath. The
 dev server and `yarn preview` both honour it, so a local run has the same shape as the deployment.
 
 ## Deployment
 
-Pushing to `main` runs the checks, then publishes `dist/` to GitHub Pages. The deploy job asks
-GitHub to enable Pages for the repository if it is not enabled already.
+Pushing to `main` runs the checks, then publishes `dist/` to GitHub Pages.
+
+One step cannot be automated: **Pages must be switched on once, by someone with repository admin** —
+Settings, then Pages, then Source: **GitHub Actions**. The workflow's own token cannot enable it, so
+until that is done the `deploy` job fails at `Configure Pages` while the `checks` job stays green.
 
 ## Licence
 

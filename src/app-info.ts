@@ -1,6 +1,7 @@
 /**
- * The app's identity in one place, so the page, the document title and the
- * end-to-end test all agree on what this thing is called and what it is for.
+ * The app's identity as the app renders it. `index.html` carries its own copy of
+ * the title and the description, because the browser needs both before any of
+ * this has loaded, so those two cannot be derived from here.
  */
 
 export const APP_TITLE = 'Lot Planner'

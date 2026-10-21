@@ -12,7 +12,6 @@ export default defineConfig({
   plugins: [svelte()],
   build: {
     outDir: 'dist',
-    sourcemap: true,
     target: 'es2023',
   },
 })

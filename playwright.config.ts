@@ -18,7 +18,15 @@ export default defineConfig({
     baseURL: `${ORIGIN}/lotplanner/`,
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      // `hasTouch` because the interaction is the riskiest surface in this app
+      // and a pure core cannot test a gesture, so this seam exists to drive
+      // real touch events rather than mouse ones.
+      use: { ...devices['Desktop Chrome'], hasTouch: true },
+    },
+  ],
   webServer: {
     // `npm` rather than `yarn` purely because npm ships with Node and is
     // therefore always on PATH, while Yarn is only the project's installer.
