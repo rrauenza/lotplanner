@@ -44,6 +44,10 @@ export default tseslint.config(
     rules: {
       // A component's props are read in the markup, which this rule cannot see.
       '@typescript-eslint/no-unused-vars': 'off',
+      // svelte2tsx declares the runes in a shape this rule reads as void, so it
+      // fires on every `let x = $state(...)`. It stays on everywhere else, where
+      // it earns its place - it caught `() => resolve(x)` in the storage adapter.
+      '@typescript-eslint/no-confusing-void-expression': 'off',
     },
   },
 
