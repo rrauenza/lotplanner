@@ -3,6 +3,7 @@
   import { loadAttribution } from './browser/attribution'
   import { imageryEffects } from './browser/imagery-store'
   import MapView from './components/MapView.svelte'
+  import Palette from './components/Palette.svelte'
   import type { LatLng } from './core/geometry'
   import { frameCorners, latLngFromOffset, type Offset } from './core/geometry'
   import {
@@ -119,6 +120,7 @@
     <p role="alert">{imagery.message}</p>
   {:else if plan !== undefined}
     <MapView imageUrl={picture} {plan} {outline} />
+    <Palette />
     {#if attribution !== ''}
       <p class="credit">{attribution}</p>
     {/if}

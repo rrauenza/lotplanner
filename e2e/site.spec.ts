@@ -101,6 +101,18 @@ test('draws the photograph at true scale, and credits it', async ({ page }) => {
   await expect(page.getByText(ATTRIBUTION)).toBeVisible()
 })
 
+test('lists the vehicles that ship with the app, with their real sizes', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+
+  const palette = page.getByRole('complementary', { name: 'Vehicles' })
+
+  await expect(palette.getByText('Semi + 53 ft trailer')).toBeVisible()
+  // 840 inches is 70 feet and 102 is 8 foot 6, read back the way they were
+  // published rather than as a number of inches.
+  await expect(palette.getByText(`70'0" x 8'6"`)).toBeVisible()
+})
+
 test('gives the photograph the whole width', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)
