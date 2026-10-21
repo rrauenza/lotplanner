@@ -150,7 +150,14 @@ export interface LatLngBounds {
   readonly northEast: LatLng
 }
 
-/** The four corners of a frame, as ground metres from the Site's origin. */
+/**
+ * The four corners of a frame, as ground metres from the Site's origin, in order
+ * around the perimeter.
+ *
+ * The order is part of the contract rather than an accident: these are handed
+ * straight to a polygon, and corners in any other order are drawn as a bowtie.
+ * The area enclosed is what notices.
+ */
 export function frameCorners(frame: SiteFrame): Offset[] {
   const radians = frame.rotationDegrees * DEGREES_TO_RADIANS
   const halfLength = frame.lengthMetres / 2
@@ -162,18 +169,26 @@ export function frameCorners(frame: SiteFrame): Offset[] {
   const acrossEast = Math.cos(radians)
   const acrossNorth = -Math.sin(radians)
 
-  return [1, -1].flatMap((lengthSign) =>
-    [1, -1].map((widthSign) => ({
-      eastMetres:
-        frame.centre.eastMetres +
-        lengthSign * halfLength * alongEast +
-        widthSign * halfWidth * acrossEast,
-      northMetres:
-        frame.centre.northMetres +
-        lengthSign * halfLength * alongNorth +
-        widthSign * halfWidth * acrossNorth,
-    })),
-  )
+  // In order around the perimeter, not across it. Walking one side of the
+  // rectangle and then the other keeps the shape simple; enumerating one axis at
+  // a time crosses it into a bowtie.
+  const walk: readonly (readonly [number, number])[] = [
+    [1, 1],
+    [1, -1],
+    [-1, -1],
+    [-1, 1],
+  ]
+
+  return walk.map(([lengthSign, widthSign]) => ({
+    eastMetres:
+      frame.centre.eastMetres +
+      lengthSign * halfLength * alongEast +
+      widthSign * halfWidth * acrossEast,
+    northMetres:
+      frame.centre.northMetres +
+      lengthSign * halfLength * alongNorth +
+      widthSign * halfWidth * acrossNorth,
+  }))
 }
 
 /**

@@ -28,6 +28,26 @@ import {
 
 const METRES_PER_DEGREE = 111319.4907932736
 
+/**
+ * The area a ring of corners encloses, signed. Zero means they cross each other,
+ * because the two halves cancel - which is what a bowtie does.
+ */
+function enclosedArea(corners: readonly Offset[]): number {
+  let twiceArea = 0
+
+  for (let index = 0; index < corners.length; index += 1) {
+    const here = corners[index]
+    const next = corners[(index + 1) % corners.length]
+
+    if (here === undefined || next === undefined) {
+      throw new Error('expected corners')
+    }
+    twiceArea += here.eastMetres * next.northMetres - next.eastMetres * here.northMetres
+  }
+
+  return Math.abs(twiceArea) / 2
+}
+
 /** Order-independent, so it cannot pin the order corners come back in. */
 function asKeys(corners: readonly Offset[]): string[] {
   return corners
@@ -125,6 +145,23 @@ describe('frameCorners', () => {
         '5.000000,10.000000',
       ].sort(),
     )
+  })
+
+  it('walks the perimeter, so the shape drawn from it is a rectangle', () => {
+    // A polygon is drawn in the order its corners arrive. Out of order they
+    // cross each other into a bowtie and the area cancels out - which is the
+    // only thing here that notices, because a bowtie has exactly the same
+    // bounding box as the rectangle it should have been.
+    for (const rotationDegrees of [0, 30, 90]) {
+      const corners = frameCorners({
+        centre: { eastMetres: 3, northMetres: -7 },
+        lengthMetres: 20,
+        widthMetres: 10,
+        rotationDegrees,
+      })
+
+      expect(enclosedArea(corners)).toBeCloseTo(20 * 10, 6)
+    }
   })
 
   it('turns the whole rectangle, not just its label', () => {
