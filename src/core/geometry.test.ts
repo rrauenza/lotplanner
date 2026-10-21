@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   boundsForExtent,
-  extentAroundFrame,
+  containsPoint,
   cornersOf,
+  extentAroundFrame,
   latLngFromOffset,
   mercatorBoundsForExtent,
   metresPerPixel,
@@ -125,6 +126,39 @@ describe('latLngFromOffset', () => {
 
     expect(back.eastMetres).toBeCloseTo(-132, 3)
     expect(back.northMetres).toBeCloseTo(199, 3)
+  })
+})
+
+describe('containsPoint', () => {
+  const rectangle = {
+    centre: { eastMetres: 0, northMetres: 0 },
+    lengthMetres: 20,
+    widthMetres: 10,
+    rotationDegrees: 0,
+  }
+
+  it('knows a point inside from one outside, on both axes', () => {
+    expect(containsPoint(rectangle, { eastMetres: 0, northMetres: 0 })).toBe(true)
+    expect(containsPoint(rectangle, { eastMetres: 4, northMetres: 9 })).toBe(true)
+    expect(containsPoint(rectangle, { eastMetres: 6, northMetres: 0 })).toBe(false)
+    expect(containsPoint(rectangle, { eastMetres: 0, northMetres: 11 })).toBe(false)
+  })
+
+  it('turns with the rectangle rather than testing a box around it', () => {
+    const turned = { ...rectangle, rotationDegrees: 90 }
+
+    // Nine metres north is well inside a rectangle lying north-south, and well
+    // outside one lying east-west, where north is only five metres across.
+    expect(containsPoint(rectangle, { eastMetres: 0, northMetres: 9 })).toBe(true)
+    expect(containsPoint(turned, { eastMetres: 0, northMetres: 9 })).toBe(false)
+    expect(containsPoint(turned, { eastMetres: 9, northMetres: 0 })).toBe(true)
+  })
+
+  it('pads for a finger without moving the rectangle', () => {
+    const justOutside = { eastMetres: 5.5, northMetres: 0 }
+
+    expect(containsPoint(rectangle, justOutside)).toBe(false)
+    expect(containsPoint(rectangle, justOutside, 1)).toBe(true)
   })
 })
 

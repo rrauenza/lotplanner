@@ -199,6 +199,37 @@ export function cornersOf(rectangle: OrientedRectangle): Offset[] {
 }
 
 /**
+ * Whether a point on the ground lies inside an oriented rectangle, optionally
+ * with the rectangle grown by a padding first.
+ *
+ * The point is turned back by the rotation and then compared against the two
+ * half-extents: the same arithmetic as drawing the rectangle, read backwards,
+ * rather than a second opinion about where its edges are. A hit test that
+ * disagrees with the drawing is a bug nobody sees until they try to grab
+ * something.
+ *
+ * The padding is for fingers. A vehicle is two metres wide and a fingertip is
+ * not, and none of that has to change what is drawn.
+ */
+export function containsPoint(
+  rectangle: OrientedRectangle,
+  point: Offset,
+  paddingMetres = 0,
+): boolean {
+  const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
+  const east = point.eastMetres - rectangle.centre.eastMetres
+  const north = point.northMetres - rectangle.centre.northMetres
+
+  const along = east * Math.sin(radians) + north * Math.cos(radians)
+  const across = east * Math.cos(radians) - north * Math.sin(radians)
+
+  return (
+    Math.abs(along) <= rectangle.lengthMetres / 2 + paddingMetres &&
+    Math.abs(across) <= rectangle.widthMetres / 2 + paddingMetres
+  )
+}
+
+/**
  * The rectangle to fetch imagery for: the frame grown by a margin on every side.
  *
  * The margin is measured along the frame's own axes, so it stays a real distance

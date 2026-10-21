@@ -4,8 +4,7 @@
   import { imageryEffects } from './browser/imagery-store'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
-  import type { LatLng } from './core/geometry'
-  import { cornersOf, latLngFromOffset, type Offset } from './core/geometry'
+  import type { Offset } from './core/geometry'
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
@@ -14,27 +13,88 @@
     USGS_NAIP_SERVICE_URL,
     type ImageryState,
   } from './core/imagery'
+  import {
+    newLayout,
+    withMovedPlacement,
+    withPlacement,
+    type Layout,
+    type Placement,
+  } from './core/layout'
   import type { Site } from './core/site'
+  import type { Vehicle } from './core/vehicle'
   import { SITES } from './manifest'
 
+  /** The one thing the App asks of the map: where a screen point is on the ground. */
+  interface MapHandle {
+    offsetAt(point: { readonly x: number; readonly y: number }): Offset | undefined
+  }
+
   let site: Site | undefined = $state(undefined)
+  let layout: Layout | undefined = $state(undefined)
+  let selectedId: string | undefined = $state(undefined)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let attribution = $state('')
   let picture = $state('')
+  // Raw, so that putting a component instance into state does not wrap it in a
+  // proxy, which a Leaflet-backed component would not enjoy.
+  let mapView = $state.raw<MapHandle | undefined>(undefined)
 
   /** Everything about the chosen Site that arithmetic alone decides. */
   const plan = $derived(
     site === undefined ? undefined : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
   )
 
-  /** The Site Frame as a shape to draw, which is a guide and never a limit. */
-  const outline = $derived(outlineFor(site))
+  function choose(choice: Site): void {
+    site = choice
+    // Nothing is stored yet, so opening a Site starts from the frame it was
+    // worked in and an empty piece of ground.
+    layout = newLayout(choice)
+    selectedId = undefined
+  }
 
-  function outlineFor(chosen: Site | undefined): LatLng[] {
-    if (chosen?.frame === undefined) {
-      return []
+  function place(vehicle: Vehicle, centre: Offset): void {
+    const current = layout
+    if (current === undefined) {
+      return
     }
-    return cornersOf(chosen.frame).map((corner: Offset) => latLngFromOffset(chosen.origin, corner))
+
+    const placement: Placement = {
+      id: crypto.randomUUID(),
+      vehicle,
+      centre,
+      // A space is seldom square to north, so a new rectangle starts along the
+      // frame it is being laid in rather than along the compass.
+      rotationDegrees: current.frame?.rotationDegrees ?? 0,
+    }
+
+    layout = withPlacement(current, placement)
+    selectedId = placement.id
+  }
+
+  /** A vehicle let go over the picture lands where it was let go. */
+  function dropFrom(vehicle: Vehicle, point: { readonly x: number; readonly y: number }): void {
+    const at = mapView?.offsetAt(point)
+    if (at !== undefined) {
+      place(vehicle, at)
+    }
+  }
+
+  /** A vehicle chosen without a pointer lands in the middle of the frame. */
+  function placeInTheMiddle(vehicle: Vehicle): void {
+    const current = layout
+    if (current !== undefined) {
+      place(vehicle, current.frame?.centre ?? { eastMetres: 0, northMetres: 0 })
+    }
+  }
+
+  function selectPlacement(id: string | undefined): void {
+    selectedId = id
+  }
+
+  function movePlacement(id: string, centre: Offset): void {
+    if (layout !== undefined) {
+      layout = withMovedPlacement(layout, id, centre)
+    }
   }
 
   $effect(() => {
@@ -99,7 +159,7 @@
         type="button"
         aria-pressed={choice.id === site?.id}
         onclick={() => {
-          site = choice
+          choose(choice)
         }}
       >
         {choice.name}
@@ -116,9 +176,19 @@
     </p>
   {:else if imagery.status === 'failed'}
     <p role="alert">{imagery.message}</p>
-  {:else if plan !== undefined}
-    <MapView imageUrl={picture} {plan} {outline} />
-    <Palette />
+  {:else if plan !== undefined && layout !== undefined}
+    <MapView
+      bind:this={mapView}
+      imageUrl={picture}
+      {plan}
+      origin={layout.origin}
+      frame={layout.frame}
+      placements={layout.placements}
+      {selectedId}
+      onselect={selectPlacement}
+      onmove={movePlacement}
+    />
+    <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
     {#if attribution !== ''}
       <p class="credit">{attribution}</p>
     {/if}

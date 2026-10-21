@@ -2,29 +2,101 @@
   import { systemVehicles } from '../core/collection'
   import { toFeetAndInches } from '../core/units'
   import type { Vehicle } from '../core/vehicle'
+  import { cssColour } from './colour'
 
-  function cssColour(colour: number): string {
-    return `#${colour.toString(16).padStart(6, '0')}`
+  /** Somewhere on the screen, in the coordinates a pointer reports. */
+  interface Point {
+    readonly x: number
+    readonly y: number
   }
+
+  interface Props {
+    /** A vehicle was dragged off the palette and let go here. */
+    ondrop: (vehicle: Vehicle, point: Point) => void
+    /** A vehicle was chosen with no pointer behind it, so it goes somewhere sensible. */
+    onplace: (vehicle: Vehicle) => void
+  }
+
+  let { ondrop, onplace }: Props = $props()
+
+  let carried: Vehicle | undefined = $state(undefined)
+  let at = $state<Point>({ x: 0, y: 0 })
 
   /** Read back the way a vehicle is published, so it can be checked at a glance. */
   function size(of: Vehicle): string {
     return `${toFeetAndInches(of.lengthInches)} x ${toFeetAndInches(of.widthInches)}`
   }
+
+  function picked(vehicle: Vehicle, event: PointerEvent): void {
+    // One finger, one vehicle: a second finger, or anything but the left button,
+    // is not a drag.
+    if (!event.isPrimary || event.button !== 0) {
+      return
+    }
+
+    carried = vehicle
+    at = { x: event.clientX, y: event.clientY }
+  }
+
+  function moved(event: PointerEvent): void {
+    if (carried === undefined) {
+      return
+    }
+    at = { x: event.clientX, y: event.clientY }
+  }
+
+  function released(event: PointerEvent): void {
+    const vehicle = carried
+    if (vehicle === undefined) {
+      return
+    }
+
+    carried = undefined
+    ondrop(vehicle, { x: event.clientX, y: event.clientY })
+  }
+
+  function cancelled(): void {
+    carried = undefined
+  }
 </script>
+
+<svelte:window onpointermove={moved} onpointerup={released} onpointercancel={cancelled} />
 
 <aside aria-label="Vehicles">
   <h2>Vehicles</h2>
   <ul>
     {#each systemVehicles as vehicle (vehicle.name)}
       <li>
-        <span class="swatch" style={`background: ${cssColour(vehicle.colour)}`}></span>
-        <span>{vehicle.name}</span>
-        <span class="size">{size(vehicle)}</span>
+        <button
+          type="button"
+          onpointerdown={(event) => {
+            picked(vehicle, event)
+          }}
+          onclick={(event) => {
+            // A click carrying no detail came from a keyboard or a screen
+            // reader rather than from a finger, and those cannot drag. The
+            // vehicle goes to the middle of the frame instead of nowhere.
+            if (event.detail === 0) {
+              onplace(vehicle)
+            }
+          }}
+        >
+          <span class="swatch" style={`background: ${cssColour(vehicle.colour)}`}></span>
+          <span>{vehicle.name}</span>
+          <span class="size">{size(vehicle)}</span>
+        </button>
       </li>
     {/each}
   </ul>
 </aside>
+
+{#if carried !== undefined}
+  <!-- Follows the finger so a drag has something to be about, and takes no
+       pointer events so that what is underneath is still what is let go over. -->
+  <p class="ghost" aria-hidden="true" style={`left: ${String(at.x)}px; top: ${String(at.y)}px`}>
+    {carried.name}
+  </p>
+{/if}
 
 <style>
   aside {
@@ -49,13 +121,19 @@
     padding: 0;
   }
 
-  li {
+  button {
     align-items: center;
+    background: none;
     border: 1px solid color-mix(in srgb, currentcolor 35%, transparent);
     border-radius: 0.25rem;
+    color: inherit;
     display: flex;
+    font: inherit;
     gap: 0.375rem;
     padding: 0.25rem 0.5rem;
+    /* Without this the page scrolls under the finger instead of the chip
+       coming along with it, which is the whole interaction. */
+    touch-action: none;
   }
 
   .swatch {
@@ -67,5 +145,17 @@
   .size {
     font-variant-numeric: tabular-nums;
     opacity: 0.75;
+  }
+
+  .ghost {
+    background: #222;
+    border-radius: 0.25rem;
+    color: #fff;
+    font-size: 0.75rem;
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    pointer-events: none;
+    position: fixed;
+    transform: translate(-50%, -180%);
   }
 </style>

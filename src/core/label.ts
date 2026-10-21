@@ -26,31 +26,44 @@ export const LABEL_FONT_PIXELS = 12
 const AVERAGE_CHARACTER_WIDTH_RATIO = 0.55
 
 /**
- * How many font sizes across a rectangle has to be before a line of text sits
- * inside it rather than across its edges.
+ * The angle to turn a label by, given the angle of the rectangle under it.
+ *
+ * The text runs along the length of what it names, and a line of text reads
+ * left to right at rest while the length of a vehicle runs north, so the text is
+ * a quarter turn behind the rectangle it sits on.
  */
-const MINIMUM_WIDTH_IN_FONT_SIZES = 1.2
+export function labelRotationFor(rotationDegrees: number): number {
+  return upright(rotationDegrees - 90)
+}
 
-/** How much room a Placement has on screen right now, along its own axes. */
-export interface ScreenRectangle {
-  readonly lengthPixels: number
-  readonly widthPixels: number
+/**
+ * The same angle, turned as far as it takes to keep the text the right way up.
+ *
+ * Screen angles repeat every half turn as far as reading is concerned, so any
+ * angle outside the range a person reads in can be replaced by the equivalent
+ * one inside it. A name upside down is worse than no name.
+ */
+function upright(rotationDegrees: number): number {
+  const halfTurn = ((rotationDegrees % 180) + 180) % 180
+
+  return halfTurn > 90 ? halfTurn - 180 : halfTurn
 }
 
 /**
  * The text to write on a rectangle, or nothing when there is no room for any.
  *
  * The name first, because it says more; then the short label, which is what it
- * is for; then nothing at all, because a name spilling across its own edges says
- * less than a clean rectangle does.
+ * is for; then nothing at all, because a name spilling out past the length of
+ * what it names says less than a clean rectangle does.
+ *
+ * What counts as room is the rectangle's length on screen, and only that. A
+ * label is allowed to stand taller than the vehicle is wide, the way a street
+ * name stands taller than the road it names - and here that is the only way a
+ * label is ever read at all, because at 1:1 imagery a 53 foot trailer is under
+ * nine pixels across.
  */
-export function labelFor(vehicle: Vehicle, rectangle: ScreenRectangle): string | undefined {
-  if (rectangle.widthPixels < LABEL_FONT_PIXELS * MINIMUM_WIDTH_IN_FONT_SIZES) {
-    return undefined
-  }
-
-  const charactersThatFit =
-    rectangle.lengthPixels / (LABEL_FONT_PIXELS * AVERAGE_CHARACTER_WIDTH_RATIO)
+export function labelFor(vehicle: Vehicle, lengthPixels: number): string | undefined {
+  const charactersThatFit = lengthPixels / (LABEL_FONT_PIXELS * AVERAGE_CHARACTER_WIDTH_RATIO)
 
   if (vehicle.name.length <= charactersThatFit) {
     return vehicle.name

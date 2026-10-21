@@ -15,3 +15,31 @@
 body {
   margin: 0;
 }
+
+/*
+ * Labels. Leaflet builds these from an element rather than Svelte from markup,
+ * so they cannot carry a scoped class and belong here. The font size arrives
+ * from the component that reasoned about it, through the variable that
+ * component sets on the map.
+ */
+
+.placement-label-anchor {
+  /* A label is not a target: the rectangle underneath it is. */
+  pointer-events: none;
+}
+
+.placement-label {
+  color: #111;
+  font-size: var(--label-font-pixels, 12px);
+  font-weight: 600;
+  left: 0;
+  /* A halo, because a label sits on a vehicle of any colour over a photograph
+     of any tone. */
+  position: absolute;
+  text-shadow:
+    0 0 3px #fff,
+    0 0 3px #fff,
+    0 0 3px #fff;
+  top: 0;
+  white-space: nowrap;
+}
