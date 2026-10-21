@@ -1,11 +1,13 @@
+import { fetchFromService } from './service'
+
 /**
  * The courtesy line under the picture, in the service's own words rather than
  * ours.
  *
- * Read from the service's metadata and then remembered, so a Site opened
- * without a signal still says where its photograph came from. The string is
- * small, so localStorage is enough; if storage is unavailable the worst that
- * happens is the line is missing on an offline visit.
+ * Read from the service's metadata and then remembered, so a Site opened with no
+ * signal still says where its photograph came from. The string is small, so
+ * localStorage is enough; if storage is unavailable the worst that happens is
+ * the line is missing on an offline visit.
  */
 
 const REMEMBERED = 'lotplanner.attribution'
@@ -18,13 +20,16 @@ export async function loadAttribution(serviceUrl: string): Promise<string> {
     return remembered
   }
 
-  inFlight ??= readFromService(serviceUrl)
-  const attribution = await inFlight
+  const attribution = await (inFlight ??= readFromService(serviceUrl).catch((cause: unknown) => {
+    // Forget the failure so the next visit tries again. The service returns 502s
+    // of its own accord, and remembering one would leave the credit line
+    // permanently missing for the rest of the session.
+    inFlight = undefined
+    throw cause
+  }))
 
-  try {
-    localStorage.setItem(`${REMEMBERED}.${serviceUrl}`, attribution)
-  } catch {
-    // Nothing to do about it: it will simply be read again next visit.
+  if (attribution !== '') {
+    remember(serviceUrl, attribution)
   }
 
   return attribution
@@ -38,16 +43,21 @@ function readRemembered(serviceUrl: string): string | null {
   }
 }
 
-async function readFromService(serviceUrl: string): Promise<string> {
-  const response = await fetch(`${serviceUrl}?f=json`)
-  if (!response.ok) {
-    throw new Error(`The imagery service answered ${String(response.status)}`)
+function remember(serviceUrl: string, attribution: string): void {
+  try {
+    localStorage.setItem(`${REMEMBERED}.${serviceUrl}`, attribution)
+  } catch {
+    // Nothing to be done about it: it will simply be read again next visit.
   }
+}
 
+async function readFromService(serviceUrl: string): Promise<string> {
+  const response = await fetchFromService(`${serviceUrl}?f=json`)
   const metadata: unknown = await response.json()
   const copyright = (metadata as { copyrightText?: unknown }).copyrightText
 
   // USGS imagery is public domain and crediting it is a courtesy, so an empty
-  // answer is shown as nothing rather than as a broken line.
+  // answer is shown as nothing rather than as a broken line - and is not
+  // remembered, so a later answer that does have it is not masked.
   return typeof copyright === 'string' ? copyright : ''
 }

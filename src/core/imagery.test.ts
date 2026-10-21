@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { exportImageUrl, imagerySize, loadImagery, type ImageryState } from './imagery'
+import {
+  exportImageUrl,
+  imageryPlanFor,
+  imagerySize,
+  loadImagery,
+  type ImageryState,
+} from './imagery'
 
 const SERVICE = 'https://imagery.example.test/USGSNAIPImagery/ImageServer'
 
@@ -76,6 +82,52 @@ describe('exportImageUrl', () => {
         size,
       }),
     ).toContain('bbox=-13584443.21,4483679.27,1.01,2&')
+  })
+})
+
+describe('imageryPlanFor', () => {
+  const site = {
+    id: 'sample',
+    name: 'Sample',
+    origin: { latitude: 37.32, longitude: -122.03 },
+    frame: {
+      centre: { eastMetres: -132, northMetres: 199 },
+      lengthMetres: 137,
+      widthMetres: 98,
+      rotationDegrees: 90,
+    },
+  }
+
+  it('asks for a bbox whose shape matches the size exactly', () => {
+    // Otherwise the service expands the bbox, and the map draws the picture by
+    // the bbox it asked for, which would stretch it very slightly.
+    const plan = imageryPlanFor(site, SERVICE)
+    const bbox = new URL(plan.requestUrl).searchParams.get('bbox')
+    expect(bbox).not.toBeNull()
+
+    const [minX = 0, minY = 0, maxX = 0, maxY = 0] = (bbox ?? '').split(',').map(Number)
+
+    // The url rounds the bbox to centimetres, so the two shapes agree only to
+    // about a millionth. That is what matters: a mismatch the service could act
+    // on would grow the bbox by a fraction of a millimetre, far under a pixel.
+    const bboxShape = (maxX - minX) / (maxY - minY)
+    const sizeShape = plan.size.width / plan.size.height
+    expect(Math.abs(bboxShape / sizeShape - 1)).toBeLessThan(1e-5)
+  })
+
+  it('caps the zoom where zooming magnifies pixels instead of revealing detail', () => {
+    // log2(156543.03392804097 * cos(37.32) / 0.3) is 18.66, so the ceiling is 19.
+    expect(imageryPlanFor(site, SERVICE).maxZoom).toBe(19)
+  })
+
+  it('asks for the whole ground extent at the imagery own resolution', () => {
+    // The frame is 137 m by 98 m and the context margin is 150 m a side, so the
+    // extent is 437 m across and 398 m down at 0.3 m per pixel.
+    const plan = imageryPlanFor(site, SERVICE)
+
+    expect(plan.size.width).toBe(1457)
+    expect(plan.size.height).toBe(1327)
+    expect(plan.size.metresPerPixel).toBeCloseTo(0.3, 3)
   })
 })
 

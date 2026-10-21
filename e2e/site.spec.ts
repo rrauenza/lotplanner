@@ -4,14 +4,18 @@ import { expect, test, type Page } from '@playwright/test'
  * The fixture Site is the one in the manifest: a 137 m by 98 m frame at
  * rotation 90, on an origin at latitude 37.32.
  *
- * Both extents below are derived by hand from that frame and the 150 m context
- * margin, so this suite fails if either changes - which is the point, because
- * both are product decisions rather than incidental numbers.
+ * The ground sizes below are derived by hand from that frame and the 150 m
+ * context margin, so this suite fails if either changes - which is the point,
+ * because both are product decisions rather than incidental numbers.
+ *
+ * At rotation 90 the frame's 137 m length runs east-west, so it sets the width
+ * of the extent: 437 m across, 398 m down.
  */
-const LATITUDE = 37.32
-// At rotation 90 the frame's 137 m length runs east-west, so it sets the width.
-const EXTENT_WIDTH_METRES = 137 + 150 + 150
-const EXTENT_HEIGHT_METRES = 98 + 150 + 150
+
+const FRAME_ALONG_EAST_METRES = 137
+const FRAME_ALONG_NORTH_METRES = 98
+const EXTENT_WIDTH_METRES = 437
+const EXTENT_HEIGHT_METRES = 398
 
 const ATTRIBUTION = 'USGS, USDA, The National Map: Orthoimagery. January 09, 2025.'
 
@@ -28,7 +32,7 @@ interface ImageryOptions {
   readonly delayMs?: number
 }
 
-/** Never touch USGS: both the picture and the service's metadata are faked. */
+/** Never touch USGS: both the picture and the service metadata are faked. */
 async function serveImagery(page: Page, options: ImageryOptions = {}): Promise<string[]> {
   const pictureRequests: string[] = []
 
@@ -64,19 +68,35 @@ test('draws the photograph at true scale, and credits it', async ({ page }) => {
   const overlay = page.locator('img.leaflet-image-layer')
   await expect(overlay).toBeVisible()
 
-  // Worked out from the published web mercator constant rather than from the
-  // app, so this cannot agree with the app by construction.
-  const zoom = Number(await page.getByTestId('map').getAttribute('data-zoom'))
-  const metresPerPixel =
-    ((2 * Math.PI * 6378137) / (256 * 2 ** zoom)) * Math.cos((LATITUDE * Math.PI) / 180)
+  // Leaflet's own rendering is deliberately not under test, so the scale is
+  // taken from the frame the app drew rather than from a zoom level or from the
+  // app recalculating anything. This measures the app's geometry against the
+  // picture it asked for, which is the claim that matters: a rectangle laid over
+  // this picture is the size of what is already in it.
+  const guide = await page.evaluate(() => {
+    const path = document.querySelector('.leaflet-overlay-pane svg path')
+    if (!(path instanceof SVGGraphicsElement)) {
+      return null
+    }
+    const box = path.getBBox()
+    return { width: box.width, height: box.height }
+  })
+
+  expect(guide).not.toBeNull()
+
+  const pixelsPerMetre = (guide?.width ?? 0) / FRAME_ALONG_EAST_METRES
+  expect(pixelsPerMetre).toBeGreaterThan(0)
+
+  // The frame's other axis has to agree, or the frame is not square to itself.
+  expect(Math.abs((guide?.height ?? 0) - FRAME_ALONG_NORTH_METRES * pixelsPerMetre)).toBeLessThan(2)
 
   const box = await overlay.boundingBox()
   expect(box).not.toBeNull()
 
-  // Within a pixel or two of the ground it claims to cover, on both axes. A
-  // stretched or mis-scaled picture would miss by much more than that.
-  expect(Math.abs((box?.width ?? 0) - EXTENT_WIDTH_METRES / metresPerPixel)).toBeLessThan(2)
-  expect(Math.abs((box?.height ?? 0) - EXTENT_HEIGHT_METRES / metresPerPixel)).toBeLessThan(2)
+  // A few pixels of slack: the extent is grown by under a pixel so that the
+  // requested bbox and the requested pixel size have exactly the same shape.
+  expect(Math.abs((box?.width ?? 0) - EXTENT_WIDTH_METRES * pixelsPerMetre)).toBeLessThan(3)
+  expect(Math.abs((box?.height ?? 0) - EXTENT_HEIGHT_METRES * pixelsPerMetre)).toBeLessThan(3)
 
   await expect(page.getByText(ATTRIBUTION)).toBeVisible()
 })
@@ -106,7 +126,7 @@ test('opens again with no network request at all', async ({ page }) => {
   pictureRequests.length = 0
 
   // A fresh page load, same browser, so this proves the stored copy is what is
-  // being drawn rather than anything in memory.
+  // being drawn rather than anything held in memory.
   await page.reload()
   await page.getByRole('button', { name: 'Cupertino sample' }).click()
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()

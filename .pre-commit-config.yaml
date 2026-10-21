@@ -22,8 +22,15 @@ repos:
         pass_filenames: false
 
       - id: typecheck-node
-        name: typecheck (config and end-to-end tests)
+        name: typecheck (config)
         entry: node_modules/.bin/tsc --noEmit -p tsconfig.node.json
+        language: system
+        files: \.(ts|js)$
+        pass_filenames: false
+
+      - id: typecheck-e2e
+        name: typecheck (end-to-end tests)
+        entry: node_modules/.bin/tsc --noEmit -p tsconfig.e2e.json
         language: system
         files: \.(ts|js)$
         pass_filenames: false

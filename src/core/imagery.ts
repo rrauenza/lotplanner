@@ -1,8 +1,19 @@
-import type { Extent, MercatorBounds } from './geometry'
+import type { Extent, LatLngBounds, MercatorBounds } from './geometry'
+import { boundsForExtent, mercatorBoundsForExtent, zoomAtNativeResolution } from './geometry'
+import { extentForSite, type Site } from './site'
 
 /** The National Map's NAIP image service, which needs no key. */
 export const USGS_NAIP_SERVICE_URL =
   'https://imagery.nationalmap.gov/arcgis/rest/services/USGSNAIPImagery/ImageServer'
+
+/**
+ * The service's own numbers, read from its metadata once and recorded here so
+ * that nothing has to be fetched before a Site can be planned.
+ *
+ * `0.3` is its `pixelSize`, `4000` its `maxImageWidth` and `maxImageHeight`.
+ */
+export const NATIVE_METRES_PER_PIXEL = 0.3
+export const MAX_IMAGE_PIXELS = 4000
 
 /** A photograph, so JPEG: PNG would be several times the bytes for no gain. */
 const FORMAT = 'jpeg'
@@ -13,7 +24,7 @@ const WEB_MERCATOR_WKID = '3857'
 export interface ImagerySize {
   readonly width: number
   readonly height: number
-  /** The ground resolution actually obtained, which may be coarser than native. */
+  /** The ground resolution obtained, which may be coarser than native. */
   readonly metresPerPixel: number
 }
 
@@ -26,10 +37,8 @@ export interface ImagerySize {
  * the picture is softer. Losing detail beats losing the Site, and for a space
  * seen from 0.3 m the difference is not what decides whether a coach fits.
  *
- * The width and height come from the one extent and the one resolution, so their
- * ratio already matches the extent's. That matters: the service *expands* a bbox
- * whose aspect does not match the size it was given, and the map then places the
- * picture by the bbox it asked for, so a mismatch would shift everything.
+ * Width and height are integers because the request demands them, so their ratio
+ * is only ever near the extent's. `extentMatching` closes that gap.
  */
 export function imagerySize(
   ground: Pick<Extent, 'halfEastMetres' | 'halfNorthMetres'>,
@@ -47,6 +56,29 @@ export function imagerySize(
   const height = Math.max(1, Math.round(nativeHeight * shrink))
 
   return { width, height, metresPerPixel: widthMetres / width }
+}
+
+/**
+ * The extent grown by well under a pixel on one axis, so its shape matches the
+ * size exactly.
+ *
+ * This is what makes the returned extent equal the requested one. The service
+ * *expands* a bbox whose aspect does not match the size it was given, and the
+ * map places the picture by the bbox the app asked for, so any disagreement
+ * would be drawn as a slight stretch - the one kind of error that quietly
+ * falsifies every rectangle laid over the picture.
+ *
+ * The url rounds its bbox to centimetres, which leaves the two shapes differing
+ * by about a millionth - a mismatch the service cannot act on, since growing the
+ * bbox to fix it would move its edge by a fraction of a millimetre.
+ */
+function extentMatching(size: ImagerySize, extent: Extent): Extent {
+  const wanted = size.width / size.height
+  const have = extent.halfEastMetres / extent.halfNorthMetres
+
+  return have < wanted
+    ? { ...extent, halfEastMetres: extent.halfNorthMetres * wanted }
+    : { ...extent, halfNorthMetres: extent.halfEastMetres / wanted }
 }
 
 export interface ImageryRequest {
@@ -85,6 +117,38 @@ export function exportImageUrl(request: ImageryRequest): string {
 
 function roundToCentimetres(metres: number): number {
   return Math.round(metres * 100) / 100
+}
+
+export interface ImageryPlan {
+  readonly requestUrl: string
+  /** Where the returned picture belongs, in degrees. */
+  readonly bounds: LatLngBounds
+  readonly size: ImagerySize
+  /** Past this, zooming magnifies pixels rather than revealing more. */
+  readonly maxZoom: number
+}
+
+/**
+ * Everything about a Site's picture that arithmetic decides, so the shell has
+ * nothing left to choose and the policy can be tested without a browser.
+ */
+export function imageryPlanFor(site: Site, serviceUrl: string): ImageryPlan {
+  const wanted = extentForSite(site)
+  const size = imagerySize(wanted, NATIVE_METRES_PER_PIXEL, MAX_IMAGE_PIXELS)
+  const extent = extentMatching(size, wanted)
+
+  return {
+    requestUrl: exportImageUrl({
+      serviceUrl,
+      mercator: mercatorBoundsForExtent(site.origin, extent),
+      size,
+    }),
+    bounds: boundsForExtent(site.origin, extent),
+    size,
+    maxZoom: Math.ceil(
+      zoomAtNativeResolution((extent.halfEastMetres * 2) / size.width, site.origin.latitude),
+    ),
+  }
 }
 
 /**

@@ -127,7 +127,8 @@ export function latLngFromOffset(origin: LatLng, offset: Offset): LatLng {
 /**
  * A Site's working area: an oriented rectangle. Its length axis points along the
  * rotation and its width across it, and the rotation runs clockwise from north -
- * the way a person describes a lot, rather than the way mathematics does.
+ * the way someone standing in the place would describe it, rather than the way
+ * mathematics does.
  */
 export interface SiteFrame {
   readonly centre: Offset
@@ -179,10 +180,10 @@ export function frameCorners(frame: SiteFrame): Offset[] {
  * The rectangle to fetch imagery for: the frame grown by a margin on every side.
  *
  * The margin is measured along the frame's own axes, so it stays a real distance
- * from the lot's edges whatever angle the lot sits at. The picture itself has to
- * be axis-aligned even when the frame is not, so the result is the bounding box
- * of the grown frame - which is why an angled frame fetches slightly more than
- * it strictly needs, in the corners.
+ * from the frame's edges whatever angle the Site sits at. The picture itself has
+ * to be axis-aligned even when the frame is not, so the result is the bounding
+ * box of the grown frame - which is why an angled frame fetches slightly more
+ * than it strictly needs, in the corners.
  */
 export function extentAroundFrame(frame: SiteFrame, marginMetres: number): Extent {
   const radians = frame.rotationDegrees * DEGREES_TO_RADIANS

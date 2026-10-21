@@ -1,7 +1,9 @@
-import { USGS_NAIP_SERVICE_URL, type ImageryEffects } from '../core/imagery'
+import type { ImageryEffects } from '../core/imagery'
+
+import { fetchFromService } from './service'
 
 /**
- * Where a Site's picture is kept between visits.
+ * Where a Site's picture is kept between visits, and how it is fetched.
  *
  * IndexedDB rather than localStorage because a picture is megabytes, and
  * indefinite rather than expiring because the service's own cache lasts twelve
@@ -58,19 +60,12 @@ export async function writeCachedImage(url: string, image: Blob): Promise<void> 
   await run('readwrite', (store) => store.put(image, url))
 }
 
-/** The picture itself. A non-ok answer is a failure, not a picture of an error. */
 export async function fetchImage(url: string): Promise<Blob> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`The imagery service answered ${String(response.status)}`)
-  }
-  return response.blob()
+  return await (await fetchFromService(url)).blob()
 }
 
-export function imageryEffects(): ImageryEffects {
-  return { fetchImage, readCache: readCachedImage, writeCache: writeCachedImage }
-}
-
-export function serviceUrl(): string {
-  return USGS_NAIP_SERVICE_URL
+export const imageryEffects: ImageryEffects = {
+  fetchImage,
+  readCache: readCachedImage,
+  writeCache: writeCachedImage,
 }

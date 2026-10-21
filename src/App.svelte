@@ -1,72 +1,42 @@
 <script lang="ts">
   import { APP_TAGLINE, APP_TITLE } from './app-info'
   import { loadAttribution } from './browser/attribution'
-  import { imageryEffects, serviceUrl } from './browser/imagery-store'
+  import { imageryEffects } from './browser/imagery-store'
   import MapView from './components/MapView.svelte'
+  import type { LatLng } from './core/geometry'
+  import { frameCorners, latLngFromOffset, type Offset } from './core/geometry'
   import {
-    boundsForExtent,
-    frameCorners,
-    latLngFromOffset,
-    mercatorBoundsForExtent,
-    zoomAtNativeResolution,
-    type Offset,
-  } from './core/geometry'
-  import {
-    exportImageUrl,
     IMAGERY_IDLE,
-    imagerySize,
+    IMAGERY_LOADING,
+    imageryPlanFor,
     loadImagery,
+    USGS_NAIP_SERVICE_URL,
     type ImageryState,
   } from './core/imagery'
-  import { extentForSite, type Site } from './core/site'
+  import type { Site } from './core/site'
   import { SITES } from './manifest'
-
-  /**
-   * The service's own numbers: how much ground its pixels cover, and how many
-   * pixels it will send in one answer. They are written here rather than read
-   * from its metadata, because that would cost a request before anything can be
-   * drawn.
-   */
-  const NATIVE_METRES_PER_PIXEL = 0.3
-  const MAX_PIXELS = 4000
-
-  const service = serviceUrl()
-  const effects = imageryEffects()
 
   let site: Site | undefined = $state(undefined)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let attribution = $state('')
   let picture = $state('')
 
-  /**
-   * Everything about the chosen Site that follows from arithmetic alone. The
-   * only part that has to wait is the picture itself, which is why the loading
-   * state and this plan are separate: the map knows how big it will be before
-   * anything arrives.
-   */
-  const plan = $derived.by(() => {
-    if (site === undefined) {
-      return undefined
-    }
+  /** Everything about the chosen Site that arithmetic alone decides. */
+  const plan = $derived(
+    site === undefined ? undefined : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
+  )
 
-    const origin = site.origin
-    const extent = extentForSite(site)
-    const size = imagerySize(extent, NATIVE_METRES_PER_PIXEL, MAX_PIXELS)
+  /** The Site Frame as a shape to draw, which is a guide and never a limit. */
+  const outline = $derived(outlineFor(site))
 
-    return {
-      requestUrl: exportImageUrl({
-        serviceUrl: service,
-        mercator: mercatorBoundsForExtent(origin, extent),
-        size,
-      }),
-      imageBounds: boundsForExtent(origin, extent),
-      outline:
-        site.frame === undefined
-          ? []
-          : frameCorners(site.frame).map((corner: Offset) => latLngFromOffset(origin, corner)),
-      maxZoom: Math.ceil(zoomAtNativeResolution(size.metresPerPixel, origin.latitude)),
+  function outlineFor(chosen: Site | undefined): LatLng[] {
+    if (chosen?.frame === undefined) {
+      return []
     }
-  })
+    return frameCorners(chosen.frame).map((corner: Offset) =>
+      latLngFromOffset(chosen.origin, corner),
+    )
+  }
 
   $effect(() => {
     const current = plan
@@ -78,9 +48,9 @@
     let abandoned = false
     let objectUrl = ''
 
-    imagery = { status: 'loading' }
+    imagery = IMAGERY_LOADING
 
-    void loadImagery(current.requestUrl, effects).then((next) => {
+    void loadImagery(current.requestUrl, imageryEffects).then((next) => {
       if (abandoned) {
         return
       }
@@ -102,7 +72,7 @@
   $effect(() => {
     let abandoned = false
 
-    void loadAttribution(service)
+    void loadAttribution(USGS_NAIP_SERVICE_URL)
       .then((text) => {
         if (!abandoned) {
           attribution = text
@@ -148,12 +118,7 @@
   {:else if imagery.status === 'failed'}
     <p role="alert">{imagery.message}</p>
   {:else if plan !== undefined}
-    <MapView
-      imageUrl={picture}
-      imageBounds={plan.imageBounds}
-      outline={plan.outline}
-      maxZoom={plan.maxZoom}
-    />
+    <MapView imageUrl={picture} {plan} {outline} />
     {#if attribution !== ''}
       <p class="credit">{attribution}</p>
     {/if}
@@ -162,33 +127,43 @@
 
 <style>
   main {
-    margin: 0 auto;
-    max-width: 60rem;
-    padding: 1rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* The photograph is the page, so it takes whatever the chrome does not. */
+    height: 100dvh;
+    padding: 0.75rem 1rem;
   }
 
   header h1 {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     margin: 0;
   }
 
   header p {
-    margin: 0.25rem 0 1rem;
+    font-size: 0.875rem;
+    margin: 0;
+  }
+
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   nav button {
-    margin: 0 0.5rem 1rem 0;
     padding: 0.5rem 0.75rem;
   }
 
   nav button[aria-pressed='true'] {
-    outline: 2px solid currentcolor;
     font-weight: 600;
+    outline: 2px solid currentcolor;
   }
 
   .credit {
     color: color-mix(in srgb, currentcolor 60%, transparent);
     font-size: 0.75rem;
-    margin: 0.5rem 0 0;
+    margin: 0;
   }
 </style>
