@@ -125,17 +125,24 @@ export function latLngFromOffset(origin: LatLng, offset: Offset): LatLng {
 }
 
 /**
- * A Site's working area: an oriented rectangle. Its length axis points along the
- * rotation and its width across it, and the rotation runs clockwise from north -
+ * An oriented rectangle on the Site's local plane: where its middle is, how long
+ * and wide it is, and how far its length axis is turned clockwise from north -
  * the way someone standing in the place would describe it, rather than the way
  * mathematics does.
+ *
+ * A Site Frame and a vehicle laid on the ground are the same shape, which is why
+ * one corner function serves both, and why the guide drawn for a frame and the
+ * rectangle drawn for a vehicle cannot disagree about what a rectangle is.
  */
-export interface SiteFrame {
+export interface OrientedRectangle {
   readonly centre: Offset
   readonly lengthMetres: number
   readonly widthMetres: number
   readonly rotationDegrees: number
 }
+
+/** A Site's working area. The same rectangle, under the name a Site uses for it. */
+export type SiteFrame = OrientedRectangle
 
 /** An axis-aligned rectangle measured from a Site's origin, in ground metres. */
 export interface Extent {
@@ -151,17 +158,17 @@ export interface LatLngBounds {
 }
 
 /**
- * The four corners of a frame, as ground metres from the Site's origin, in order
- * around the perimeter.
+ * The four corners of an oriented rectangle, as ground metres from the Site's
+ * origin, in order around the perimeter.
  *
- * The order is part of the contract rather than an accident: these are handed
+ * The order is the whole contract rather than an accident: these are handed
  * straight to a polygon, and corners in any other order are drawn as a bowtie.
  * The area enclosed is what notices.
  */
-export function frameCorners(frame: SiteFrame): Offset[] {
-  const radians = frame.rotationDegrees * DEGREES_TO_RADIANS
-  const halfLength = frame.lengthMetres / 2
-  const halfWidth = frame.widthMetres / 2
+export function cornersOf(rectangle: OrientedRectangle): Offset[] {
+  const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
+  const halfLength = rectangle.lengthMetres / 2
+  const halfWidth = rectangle.widthMetres / 2
 
   // Along the rotation and across it. At zero the length runs north.
   const alongEast = Math.sin(radians)
@@ -181,11 +188,11 @@ export function frameCorners(frame: SiteFrame): Offset[] {
 
   return walk.map(([lengthSign, widthSign]) => ({
     eastMetres:
-      frame.centre.eastMetres +
+      rectangle.centre.eastMetres +
       lengthSign * halfLength * alongEast +
       widthSign * halfWidth * acrossEast,
     northMetres:
-      frame.centre.northMetres +
+      rectangle.centre.northMetres +
       lengthSign * halfLength * alongNorth +
       widthSign * halfWidth * acrossNorth,
   }))

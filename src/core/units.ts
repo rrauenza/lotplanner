@@ -8,6 +8,7 @@
  */
 
 const INCHES_PER_FOOT = 12
+const METRES_PER_INCH = 0.0254
 
 /**
  * What a pair of boxes means, in total inches, or nothing if they do not mean a
@@ -45,6 +46,17 @@ export function toFeetAndInches(totalInches: number): string {
   const inches = totalInches - feet * INCHES_PER_FOOT
 
   return `${String(feet)}'${String(inches)}"`
+}
+
+/**
+ * Inches as ground metres, which is where a published size becomes a rectangle.
+ *
+ * The world publishes a vehicle in feet and inches; the map, the drawings and
+ * everything measured off the photograph are in metres. This is the one step
+ * between them.
+ */
+export function inchesToMetres(inches: number): number {
+  return inches * METRES_PER_INCH
 }
 
 function wholeNumber(text: string): number | undefined {

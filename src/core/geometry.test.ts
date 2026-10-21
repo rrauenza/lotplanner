@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   boundsForExtent,
   extentAroundFrame,
-  frameCorners,
+  cornersOf,
   latLngFromOffset,
   mercatorBoundsForExtent,
   metresPerPixel,
@@ -128,9 +128,9 @@ describe('latLngFromOffset', () => {
   })
 })
 
-describe('frameCorners', () => {
+describe('cornersOf', () => {
   it('travels the length north and the width east when rotation is north', () => {
-    const corners = frameCorners({
+    const corners = cornersOf({
       centre: { eastMetres: 0, northMetres: 0 },
       lengthMetres: 20,
       widthMetres: 10,
@@ -153,7 +153,7 @@ describe('frameCorners', () => {
     // only thing here that notices, because a bowtie has exactly the same
     // bounding box as the rectangle it should have been.
     for (const rotationDegrees of [0, 30, 90]) {
-      const corners = frameCorners({
+      const corners = cornersOf({
         centre: { eastMetres: 3, northMetres: -7 },
         lengthMetres: 20,
         widthMetres: 10,
@@ -165,7 +165,7 @@ describe('frameCorners', () => {
   })
 
   it('turns the whole rectangle, not just its label', () => {
-    const corners = frameCorners({
+    const corners = cornersOf({
       centre: { eastMetres: 10, northMetres: 20 },
       lengthMetres: 40,
       widthMetres: 20,

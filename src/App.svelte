@@ -5,7 +5,7 @@
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
   import type { LatLng } from './core/geometry'
-  import { frameCorners, latLngFromOffset, type Offset } from './core/geometry'
+  import { cornersOf, latLngFromOffset, type Offset } from './core/geometry'
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
@@ -34,9 +34,7 @@
     if (chosen?.frame === undefined) {
       return []
     }
-    return frameCorners(chosen.frame).map((corner: Offset) =>
-      latLngFromOffset(chosen.origin, corner),
-    )
+    return cornersOf(chosen.frame).map((corner: Offset) => latLngFromOffset(chosen.origin, corner))
   }
 
   $effect(() => {
