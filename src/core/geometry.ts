@@ -192,37 +192,46 @@ export interface LatLngBounds {
  * straight to a polygon, and corners in any other order are drawn as a bowtie.
  * The area enclosed is what notices.
  */
-export function cornersOf(rectangle: OrientedRectangle): Offset[] {
+/**
+ * A point measured from a rectangle's centre: so far along its length, and so
+ * far across its width.
+ *
+ * The basis the corners are walked in, kept in one place so that anything placed
+ * relative to a rectangle agrees with where the rectangle is drawn: a duplicate
+ * beside it, a handle beyond its nose, a corner of it.
+ */
+export function alongAndAcross(
+  rectangle: OrientedRectangle,
+  alongMetres: number,
+  acrossMetres: number,
+): Offset {
   const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
+
+  return {
+    eastMetres:
+      rectangle.centre.eastMetres +
+      alongMetres * Math.sin(radians) +
+      acrossMetres * Math.cos(radians),
+    northMetres:
+      rectangle.centre.northMetres +
+      alongMetres * Math.cos(radians) -
+      acrossMetres * Math.sin(radians),
+  }
+}
+
+export function cornersOf(rectangle: OrientedRectangle): Offset[] {
   const halfLength = rectangle.lengthMetres / 2
   const halfWidth = rectangle.widthMetres / 2
-
-  // Along the rotation and across it. At zero the length runs north.
-  const alongEast = Math.sin(radians)
-  const alongNorth = Math.cos(radians)
-  const acrossEast = Math.cos(radians)
-  const acrossNorth = -Math.sin(radians)
 
   // In order around the perimeter, not across it. Walking one side of the
   // rectangle and then the other keeps the shape simple; enumerating one axis at
   // a time crosses it into a bowtie.
-  const walk: readonly (readonly [number, number])[] = [
-    [1, 1],
-    [1, -1],
-    [-1, -1],
-    [-1, 1],
+  return [
+    alongAndAcross(rectangle, halfLength, halfWidth),
+    alongAndAcross(rectangle, halfLength, -halfWidth),
+    alongAndAcross(rectangle, -halfLength, -halfWidth),
+    alongAndAcross(rectangle, -halfLength, halfWidth),
   ]
-
-  return walk.map(([lengthSign, widthSign]) => ({
-    eastMetres:
-      rectangle.centre.eastMetres +
-      lengthSign * halfLength * alongEast +
-      widthSign * halfWidth * acrossEast,
-    northMetres:
-      rectangle.centre.northMetres +
-      lengthSign * halfLength * alongNorth +
-      widthSign * halfWidth * acrossNorth,
-  }))
 }
 
 /**

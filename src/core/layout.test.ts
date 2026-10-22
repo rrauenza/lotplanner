@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { offsetFromLatLng } from './geometry'
+import { containsPoint, offsetFromLatLng } from './geometry'
 import {
+  duplicateOf,
   newLayout,
   rectangleOf,
   withEditedVehicle,
   withMovedPlacement,
   withRotatedPlacement,
   withPlacement,
+  withoutPlacement,
   type Placement,
 } from './layout'
 import type { Site } from './site'
@@ -126,6 +128,43 @@ describe('changing a Layout', () => {
     expect(rotationOf(turned, 'one')).toBe(90)
     // And the state it was turned from has not turned.
     expect(rotationOf(start, 'two')).toBe(90)
+  })
+})
+
+describe('copying and removing a Placement', () => {
+  it('copies a vehicle one width to the side, at the same angle', () => {
+    const original = at('one')
+    const copy = duplicateOf(original, 'copy')
+
+    // The Explorer is 79 inches, which is 2.0066 m across, and the Explorer's
+    // rectangle lies east-west at 90 degrees, so that is a distance across
+    // rather than along.
+    expect(copy.vehicle).toBe(original.vehicle)
+    expect(copy.rotationDegrees).toBe(90)
+    expect(Math.hypot(copy.centre.eastMetres, copy.centre.northMetres)).toBeCloseTo(2.0066, 4)
+  })
+
+  it('puts the copy where it does not cover what it came from', () => {
+    const original = at('one')
+    const copy = duplicateOf(original, 'copy')
+
+    expect(containsPoint(rectangleOf(copy), original.centre)).toBe(false)
+    expect(containsPoint(rectangleOf(original), copy.centre)).toBe(false)
+  })
+
+  it('takes one Placement off and leaves the others where they were', () => {
+    const start = withPlacement(withPlacement(newLayout(SITE), at('one')), at('two'))
+    const left = withoutPlacement(start, 'one')
+
+    expect(left.placements.map((each) => each.id)).toEqual(['two'])
+    // And the state before the removal still has both.
+    expect(start.placements).toHaveLength(2)
+  })
+
+  it('leaves a Layout alone when asked to remove something that is not there', () => {
+    const start = withPlacement(newLayout(SITE), at('one'))
+
+    expect(withoutPlacement(start, 'nobody').placements.map((each) => each.id)).toEqual(['one'])
   })
 })
 

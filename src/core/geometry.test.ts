@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  alongAndAcross,
   boundsForExtent,
   containsPoint,
   cornersOf,
@@ -159,6 +160,43 @@ describe('containsPoint', () => {
 
     expect(containsPoint(rectangle, justOutside)).toBe(false)
     expect(containsPoint(rectangle, justOutside, 1)).toBe(true)
+  })
+})
+
+describe('alongAndAcross', () => {
+  it('puts a point where the corners of the rectangle say it is', () => {
+    // A quarter turn: the length runs east, so half of it along is ten metres
+    // east of the middle, and nothing north of it.
+    const nose = alongAndAcross(
+      {
+        centre: { eastMetres: 3, northMetres: -7 },
+        lengthMetres: 20,
+        widthMetres: 10,
+        rotationDegrees: 90,
+      },
+      10,
+      0,
+    )
+
+    expect(nose.eastMetres).toBeCloseTo(13, 6)
+    expect(nose.northMetres).toBeCloseTo(-7, 6)
+  })
+
+  it('carries across to the side, which is not the same direction as along', () => {
+    // Square to north: the length runs north, so across runs east.
+    const right = alongAndAcross(
+      {
+        centre: { eastMetres: 0, northMetres: 0 },
+        lengthMetres: 20,
+        widthMetres: 10,
+        rotationDegrees: 0,
+      },
+      0,
+      5,
+    )
+
+    expect(right.eastMetres).toBeCloseTo(5, 6)
+    expect(right.northMetres).toBeCloseTo(0, 6)
   })
 })
 

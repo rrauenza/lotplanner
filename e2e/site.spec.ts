@@ -381,8 +381,9 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   const grab = middleOf(before)
 
   // Tapping empty space lets it go; tapping the vehicle picks it up again, and
-  // a tap is a real touch rather than a mouse click.
-  await page.touchscreen.tap(drop.x + 160, drop.y + 60)
+  // a tap is a real touch rather than a mouse click. Both presses are on the
+  // map above the sheet, which is where a vehicle's own controls are not.
+  await page.touchscreen.tap(drop.x + 160, drop.y - 60)
   await expect(page.locator('path.placement.selected')).toHaveCount(0)
 
   await page.touchscreen.tap(grab.x, grab.y)
@@ -403,8 +404,8 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
 
   await touchDrag(
     page,
-    { x: drop.x + 220, y: drop.y + 70 },
-    { x: drop.x + 120, y: drop.y + 130 },
+    { x: drop.x - 160, y: drop.y - 40 },
+    { x: drop.x - 260, y: drop.y + 20 },
     10,
   )
 
@@ -555,4 +556,48 @@ test('turns a vehicle onto the row already laid', async ({ page }) => {
   // first vehicle's own angle rather than the space's.
   expect(Math.abs(byHand)).toBeGreaterThan(10)
   expect(await labelAngle(page, 1)).toBe(byHand)
+})
+
+test('makes three in three taps, and takes one away', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drop = await middleOfTheMap(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+
+  // Turned by hand first, so that keeping the angle is something to check.
+  await turnTo(page, drop, 37)
+
+  const drawn = page.locator('path.placement')
+  await expect(drawn).toHaveCount(1)
+
+  const turned = await labelAngle(page)
+  expect(Math.abs(turned)).toBeGreaterThan(10)
+
+  // Two more taps on Duplicate make three. A row of twelve would be twelve.
+  await page.getByRole('button', { name: 'Duplicate' }).click()
+  await page.getByRole('button', { name: 'Duplicate' }).click()
+  await expect(drawn).toHaveCount(3)
+
+  // Every one of them keeps the angle it came from.
+  expect(await labelAngle(page, 1)).toBe(turned)
+  expect(await labelAngle(page, 2)).toBe(turned)
+
+  // And none of them is underneath another: three corners, three positions.
+  const places = await page.evaluate(
+    () =>
+      new Set(
+        [...document.querySelectorAll('path.placement')].map((path) => {
+          const rect = path.getBoundingClientRect()
+          return `${String(Math.round(rect.x))},${String(Math.round(rect.y))}`
+        }),
+      ).size,
+  )
+  expect(places).toBe(3)
+
+  // Deleting takes away only the one that is selected, which is the last copy.
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await expect(drawn).toHaveCount(2)
+  expect(await labelAngle(page)).toBe(turned)
 })

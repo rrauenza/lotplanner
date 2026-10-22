@@ -1,4 +1,5 @@
 import {
+  alongAndAcross,
   boundsForExtent,
   type LatLng,
   type LatLngBounds,
@@ -79,9 +80,38 @@ export function rectangleOf(placement: Placement): OrientedRectangle {
   }
 }
 
+/**
+ * A copy of a Placement, one vehicle's width to one side of the original.
+ *
+ * To the side rather than in front, because that is what a row of them is: a
+ * duplicate is parked abreast of what it came from, so three of them read as
+ * three rather than as one with the others hidden underneath.
+ *
+ * The id is given rather than made here, because inventing an identity is the
+ * shell's job: the core has no clock and no randomness.
+ */
+export function duplicateOf(placement: Placement, id: string): Placement {
+  const rectangle = rectangleOf(placement)
+
+  return {
+    id,
+    vehicle: placement.vehicle,
+    centre: alongAndAcross(rectangle, 0, rectangle.widthMetres),
+    rotationDegrees: placement.rotationDegrees,
+  }
+}
+
 /** The same Layout with one more vehicle on it. */
 export function withPlacement(layout: Layout, placement: Placement): Layout {
   return { ...layout, placements: [...layout.placements, placement] }
+}
+
+/** The same Layout with one Placement taken off it, and nothing else changed. */
+export function withoutPlacement(layout: Layout, id: string): Layout {
+  return {
+    ...layout,
+    placements: layout.placements.filter((placement) => placement.id !== id),
+  }
 }
 
 /**

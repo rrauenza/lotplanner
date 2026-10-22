@@ -16,11 +16,13 @@
     type ImageryState,
   } from './core/imagery'
   import {
+    duplicateOf,
     newLayout,
     withEditedVehicle,
     withMovedPlacement,
     withRotatedPlacement,
     withPlacement,
+    withoutPlacement,
     type Layout,
     type Placement,
   } from './core/layout'
@@ -131,6 +133,38 @@
     }
   }
 
+  /**
+   * The same vehicle again, beside the one that is selected - and the copy is
+   * what is selected afterwards, so that a second tap makes a third. Three buses
+   * take three taps.
+   */
+  function duplicatePlacement(): void {
+    const current = layout
+    const selected = selectedPlacement()
+
+    if (current === undefined || selected === undefined) {
+      return
+    }
+
+    const copy = duplicateOf(selected, crypto.randomUUID())
+
+    layout = withPlacement(current, copy)
+    selectedId = copy.id
+  }
+
+  /** Take the selected vehicle off this Layout, and let go of the selection. */
+  function deletePlacement(): void {
+    const current = layout
+    const selected = selectedPlacement()
+
+    if (current === undefined || selected === undefined) {
+      return
+    }
+
+    layout = withoutPlacement(current, selected.id)
+    selectedId = undefined
+  }
+
   $effect(() => {
     const current = plan
     if (current === undefined) {
@@ -231,6 +265,12 @@
              so correcting one vehicle and then picking another starts afresh. -->
         {#key selectedId}
           <div class="sheet">
+            <!-- What can be done with the vehicle that is selected. Turning is
+                 not in here: that is the handle's job, and only the handle's. -->
+            <div class="bar">
+              <button type="button" onclick={duplicatePlacement}>Duplicate</button>
+              <button type="button" onclick={deletePlacement}>Delete</button>
+            </div>
             <VehicleEditor of={selectedVehicle} onchange={correctVehicle} />
           </div>
         {/key}
@@ -303,6 +343,16 @@
        context, so without this the sheet is drawn behind the photograph. Above
        the panes, below the map's own controls. */
     z-index: 800;
+  }
+
+  .bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .bar button {
+    padding: 0.25rem 0.75rem;
   }
 
   .credit {
