@@ -558,6 +558,65 @@ test('turns a vehicle onto the row already laid', async ({ page }) => {
   expect(await labelAngle(page, 1)).toBe(byHand)
 })
 
+test('undoes and redoes, by the buttons and by the keyboard', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  const undoButton = page.getByRole('button', { name: 'Undo' })
+  const redoButton = page.getByRole('button', { name: 'Redo' })
+
+  // An empty piece of ground has nothing to undo or redo, and neither button
+  // offers to do it.
+  await expect(undoButton).toBeDisabled()
+  await expect(redoButton).toBeDisabled()
+
+  const drop = await middleOfTheMap(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+  await expect(drawn).toHaveCount(1)
+  await expect(undoButton).toBeEnabled()
+  await expect(redoButton).toBeDisabled()
+
+  // A second one, so that undo has an order to work backwards through.
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: drop.x + 80, y: drop.y + 70 })
+  await expect(drawn).toHaveCount(2)
+
+  // Back one at a time, by the button, and then to the state it began in.
+  await undoButton.click()
+  await expect(drawn).toHaveCount(1)
+  await expect(redoButton).toBeEnabled()
+
+  await undoButton.click()
+  await expect(drawn).toHaveCount(0)
+  await expect(undoButton).toBeDisabled()
+  await expect(redoButton).toBeEnabled()
+
+  // Forward again, by the keyboard this time: Control and Shift and Z.
+  await page.keyboard.press('Control+Shift+z')
+  await expect(drawn).toHaveCount(1)
+  await page.keyboard.press('Control+Shift+z')
+  await expect(drawn).toHaveCount(2)
+  await expect(redoButton).toBeDisabled()
+
+  // An edit made after undoing is a new history: what was undone is not
+  // something to go forward to any more.
+  await undoButton.click()
+  await expect(drawn).toHaveCount(1)
+  await expect(redoButton).toBeEnabled()
+
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: drop.x - 80, y: drop.y - 70 })
+  await expect(drawn).toHaveCount(2)
+  await expect(redoButton).toBeDisabled()
+
+  // Deleting is one of the edits undo reverses, and the one just placed is
+  // already the selected one, so its own controls are up.
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await expect(drawn).toHaveCount(1)
+  await undoButton.click()
+  await expect(drawn).toHaveCount(2)
+})
+
 test('makes three in three taps, and takes one away', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)

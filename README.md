@@ -11,8 +11,11 @@ whether they fit.
 
 You can pick a place, see its photograph at true scale, drag a vehicle out of the palette onto it,
 and drag it around. Tapping a vehicle opens a form on it: name, label, width, length and colour, and
-correcting any of them corrects every copy of that vehicle at once. Nothing is saved yet: a reload
-starts again from an empty piece of ground, and undo has not been built.
+correcting any of them corrects every copy of that vehicle at once. A selection also carries a handle
+for turning it, which settles onto the angles of the space and of the vehicles already beside it, and
+buttons to duplicate it or delete it. Undo and redo work over every one of those edits, by button or
+by keyboard, and last for the session. Nothing is saved yet: a reload starts again from an empty piece
+of ground.
 
 - The domain vocabulary is in [`GLOSSARY.md`](./GLOSSARY.md).
 - The decisions and their reasons are in [`docs/adr/`](./docs/adr/).

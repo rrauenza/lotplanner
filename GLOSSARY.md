@@ -31,3 +31,7 @@ _Avoid_: instance, marker, pin
 **Layout**:
 The arrangement of Placements at a Site, carrying its own copies of the Vehicles it uses.
 _Avoid_: plan, drawing
+
+**Editor**:
+A Layout together with the edits behind it and ahead of it — what an undo would reverse and what a redo would re-apply. It is memory, so it lasts for the session and no longer.
+_Avoid_: history, state, session, document

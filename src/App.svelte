@@ -6,6 +6,7 @@
   import Palette from './components/Palette.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
+  import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
   import type { Offset } from './core/geometry'
   import {
     IMAGERY_IDLE,
@@ -36,7 +37,16 @@
   }
 
   let site: Site | undefined = $state(undefined)
-  let layout: Layout | undefined = $state(undefined)
+
+  /**
+   * The editing history. What is on the ground is always the top of it, and every
+   * change goes through `change` below - so undo works for all of them without
+   * any of them knowing that undo exists.
+   */
+  let editor = $state<Editor | undefined>(undefined)
+
+  /** The Layout as it stands, if a Site has been opened. */
+  const layout = $derived(editor?.present)
   let selectedId: string | undefined = $state(undefined)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let attribution = $state('')
@@ -49,6 +59,52 @@
   const plan = $derived(
     site === undefined ? undefined : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
   )
+
+  /**
+   * Put an edit on the history. Every change to a Layout goes through here, which
+   * is what makes undo work for all of them at once.
+   */
+  function change(next: Layout): void {
+    if (editor !== undefined) {
+      editor = edit(editor, next)
+    }
+  }
+
+  function undoEdit(): void {
+    if (editor !== undefined) {
+      editor = undo(editor)
+      forgetADroppedSelection()
+    }
+  }
+
+  function redoEdit(): void {
+    if (editor !== undefined) {
+      editor = redo(editor)
+      forgetADroppedSelection()
+    }
+  }
+
+  /** A selection that is no longer on the ground is not a selection. */
+  function forgetADroppedSelection(): void {
+    if (selectedPlacement() === undefined) {
+      selectedId = undefined
+    }
+  }
+
+  /** Ctrl and Z, or Cmd and Z, with Shift to go forward again. */
+  function shortcut(event: KeyboardEvent): void {
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') {
+      return
+    }
+
+    event.preventDefault()
+
+    if (event.shiftKey) {
+      redoEdit()
+    } else {
+      undoEdit()
+    }
+  }
 
   /** The Placement that is selected, if one is. */
   function selectedPlacement(): Placement | undefined {
@@ -71,14 +127,14 @@
       return
     }
 
-    layout = withEditedVehicle(current, selected.vehicle, corrected)
+    change(withEditedVehicle(current, selected.vehicle, corrected))
   }
 
   function choose(choice: Site): void {
     site = choice
     // Nothing is stored yet, so opening a Site starts from the frame it was
     // worked in and an empty piece of ground.
-    layout = newLayout(choice)
+    editor = startEditing(newLayout(choice))
     selectedId = undefined
   }
 
@@ -97,7 +153,7 @@
       rotationDegrees: current.frame?.rotationDegrees ?? 0,
     }
 
-    layout = withPlacement(current, placement)
+    change(withPlacement(current, placement))
     selectedId = placement.id
   }
 
@@ -123,13 +179,13 @@
 
   function movePlacement(id: string, centre: Offset): void {
     if (layout !== undefined) {
-      layout = withMovedPlacement(layout, id, centre)
+      change(withMovedPlacement(layout, id, centre))
     }
   }
 
   function rotatePlacement(id: string, rotationDegrees: number): void {
     if (layout !== undefined) {
-      layout = withRotatedPlacement(layout, id, rotationDegrees)
+      change(withRotatedPlacement(layout, id, rotationDegrees))
     }
   }
 
@@ -148,7 +204,7 @@
 
     const copy = duplicateOf(selected, crypto.randomUUID())
 
-    layout = withPlacement(current, copy)
+    change(withPlacement(current, copy))
     selectedId = copy.id
   }
 
@@ -161,7 +217,7 @@
       return
     }
 
-    layout = withoutPlacement(current, selected.id)
+    change(withoutPlacement(current, selected.id))
     selectedId = undefined
   }
 
@@ -214,6 +270,8 @@
     }
   })
 </script>
+
+<svelte:window onkeydown={shortcut} />
 
 <main>
   <header>
@@ -275,6 +333,22 @@
           </div>
         {/key}
       {/if}
+    </div>
+    <!-- Always reachable, and never inside the selection's sheet: undoing a
+         delete has to be possible when nothing is selected any more. -->
+    <div class="history">
+      <button
+        type="button"
+        title="Ctrl and Z"
+        disabled={editor === undefined || !canUndo(editor)}
+        onclick={undoEdit}>Undo</button
+      >
+      <button
+        type="button"
+        title="Ctrl, Shift and Z"
+        disabled={editor === undefined || !canRedo(editor)}
+        onclick={redoEdit}>Redo</button
+      >
     </div>
     <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
     <!-- Here even before it is known, so that the credit arriving cannot resize
@@ -349,6 +423,15 @@
     display: flex;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
+  }
+
+  .history {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .history button {
+    padding: 0.25rem 0.75rem;
   }
 
   .bar button {

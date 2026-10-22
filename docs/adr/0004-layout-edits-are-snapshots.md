@@ -24,5 +24,8 @@ every gesture.
 
 - Because a Layout embeds its own Vehicle copies (ADR 0002), a snapshot is small: Placements plus
   their Vehicle copies, never the Site or the imagery.
+- Because the stack is memory and nothing more, it lasts exactly as long as the session: a reload
+  begins with nothing to undo. It is also capped, so a long afternoon of nudging one vehicle cannot
+  grow without bound.
 - This is also why Collections stay out of the undo model — they are not edited in place while a
   Layout is open.
