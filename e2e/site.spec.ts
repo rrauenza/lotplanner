@@ -516,6 +516,14 @@ test('turns a vehicle, and it settles onto the angle the space is at', async ({ 
   // inside the tolerance. It settles back onto the space it is in.
   await turnTo(page, drop, 93)
   expect(Math.abs(await labelAngle(page))).toBeLessThan(0.001)
+
+  // And it never went anywhere: turning is not moving, and the press that turns
+  // a vehicle lands on the handle rather than on the vehicle.
+  const placed = middleOf(
+    (await page.locator('path.placement').boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 },
+  )
+  expect(Math.abs(placed.x - drop.x)).toBeLessThan(2)
+  expect(Math.abs(placed.y - drop.y)).toBeLessThan(2)
 })
 
 test('turns a vehicle onto the row already laid', async ({ page }) => {
