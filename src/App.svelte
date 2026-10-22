@@ -4,6 +4,7 @@
   import { imageryEffects } from './browser/imagery-store'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
+  import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
   import type { Offset } from './core/geometry'
   import {
@@ -16,6 +17,7 @@
   } from './core/imagery'
   import {
     newLayout,
+    withEditedVehicle,
     withMovedPlacement,
     withPlacement,
     type Layout,
@@ -44,6 +46,30 @@
   const plan = $derived(
     site === undefined ? undefined : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
   )
+
+  /** The Placement that is selected, if one is. */
+  function selectedPlacement(): Placement | undefined {
+    return layout?.placements.find((each) => each.id === selectedId)
+  }
+
+  /** The vehicle the selected Placement is carrying, if something is selected. */
+  const selectedVehicle = $derived(selectedPlacement()?.vehicle)
+
+  /**
+   * Correct the vehicle the selected Placement carries, and every Placement of
+   * it in this Layout with it. A collection is never touched: a Layout keeps its
+   * own copies of what it uses, so this cannot reach one.
+   */
+  function correctVehicle(corrected: Vehicle): void {
+    const current = layout
+    const selected = selectedPlacement()
+
+    if (current === undefined || selected === undefined) {
+      return
+    }
+
+    layout = withEditedVehicle(current, selected.vehicle, corrected)
+  }
 
   function choose(choice: Site): void {
     site = choice
@@ -178,21 +204,34 @@
   {:else if imagery.status === 'failed'}
     <p role="alert">{imagery.message}</p>
   {:else if plan !== undefined && layout !== undefined}
-    <MapView
-      bind:this={mapView}
-      imageUrl={picture}
-      {plan}
-      origin={layout.origin}
-      frame={layout.frame}
-      placements={layout.placements}
-      {selectedId}
-      onselect={selectPlacement}
-      onmove={movePlacement}
-    />
+    <div class="stage">
+      <MapView
+        bind:this={mapView}
+        imageUrl={picture}
+        {plan}
+        origin={layout.origin}
+        frame={layout.frame}
+        placements={layout.placements}
+        {selectedId}
+        onselect={selectPlacement}
+        onmove={movePlacement}
+      />
+      {#if selectedVehicle !== undefined}
+        <!-- A sheet over the photograph rather than a row under it, so that
+             opening the form never resizes the map - which would move the ground
+             under whoever has just tapped a vehicle. Keyed on what is selected,
+             so correcting one vehicle and then picking another starts afresh. -->
+        {#key selectedId}
+          <div class="sheet">
+            <VehicleEditor of={selectedVehicle} onchange={correctVehicle} />
+          </div>
+        {/key}
+      {/if}
+    </div>
     <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
-    {#if attribution !== ''}
-      <p class="credit">{attribution}</p>
-    {/if}
+    <!-- Here even before it is known, so that the credit arriving cannot resize
+         the map either. -->
+    <p class="credit">{attribution}</p>
   {/if}
 </main>
 
@@ -232,9 +271,34 @@
     outline: 2px solid currentcolor;
   }
 
+  .stage {
+    display: flex;
+    /* The photograph fills the stage, and anything that belongs to a vehicle
+       floats over it rather than taking room from it: a map that resizes when
+       something is selected moves the ground under the finger that selected it. */
+    flex: 1;
+    min-height: 0;
+    position: relative;
+  }
+
+  .sheet {
+    background: Canvas;
+    border-radius: 0.375rem 0.375rem 0 0;
+    bottom: 0;
+    left: 0;
+    max-height: 60%;
+    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
+    position: absolute;
+    right: 0;
+  }
+
   .credit {
     color: color-mix(in srgb, currentcolor 60%, transparent);
     font-size: 0.75rem;
     margin: 0;
+    /* Kept as a line whether or not it has been fetched yet, for the same
+       reason: a credit arriving must not resize the map. */
+    min-height: 1em;
   }
 </style>

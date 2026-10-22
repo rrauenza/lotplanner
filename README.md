@@ -10,8 +10,9 @@ whether they fit.
 ## Status
 
 You can pick a place, see its photograph at true scale, drag a vehicle out of the palette onto it,
-and drag it around. Nothing is saved yet: a reload starts again from an empty piece of ground, and
-undo has not been built.
+and drag it around. Tapping a vehicle opens a form on it: name, label, width, length and colour, and
+correcting any of them corrects every copy of that vehicle at once. Nothing is saved yet: a reload
+starts again from an empty piece of ground, and undo has not been built.
 
 - The domain vocabulary is in [`GLOSSARY.md`](./GLOSSARY.md).
 - The decisions and their reasons are in [`docs/adr/`](./docs/adr/).

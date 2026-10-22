@@ -218,6 +218,19 @@ function middleOf(box: { x: number; y: number; width: number; height: number }):
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 }
 
+/** The size of every vehicle drawn, in the pixels the map drew them in. */
+async function drawnSizes(page: Page): Promise<{ width: number; height: number }[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('path.placement')].flatMap((path) => {
+      if (!(path instanceof SVGGraphicsElement)) {
+        return []
+      }
+      const box = path.getBBox()
+      return [{ width: box.width, height: box.height }]
+    }),
+  )
+}
+
 async function middleOfTheMap(page: Page): Promise<Point> {
   const box = await page.locator('.leaflet-container').boundingBox()
   expect(box).not.toBeNull()
@@ -382,4 +395,51 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   expect(Math.abs(vehicleAfter.y - vehicleBefore.y - (frameAfter.y - frameBefore.y))).toBeLessThan(
     1,
   )
+})
+
+test('corrects a vehicle, and every copy of it at once', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const map = await middleOfTheMap(page)
+  const first = { x: map.x - 70, y: map.y }
+  const second = { x: map.x + 70, y: map.y }
+
+  // The same vehicle twice, which is the case a correction is about.
+  await dragFromPalette(page, /Semi \+ 53 ft/, first)
+  await dragFromPalette(page, /Semi \+ 53 ft/, second)
+  await expect(page.locator('path.placement')).toHaveCount(2)
+
+  const scale = await pixelsPerMetre(page)
+  const editor = page.getByRole('region', { name: 'The selected vehicle' })
+
+  // The second drop left the second one selected, so the first is selected by
+  // tapping it - and the form opens on what the vehicle publishes: 8 foot 6.
+  await page.touchscreen.tap(first.x, first.y)
+  await expect(editor.getByLabel('Width, feet')).toHaveValue('8')
+  await expect(editor.getByLabel('Width, inches')).toHaveValue('6')
+
+  // Correct it to 12 feet 6, which is 150 inches.
+  await editor.getByLabel('Width, feet').fill('12')
+  await editor.getByLabel('Width, inches').fill('6')
+
+  // Both rectangles changed, because both placements carry the same vehicle.
+  const grown = await drawnSizes(page)
+  expect(grown).toHaveLength(2)
+  for (const size of grown) {
+    expect(Math.abs(size.height - 150 * 0.0254 * scale)).toBeLessThan(2)
+  }
+
+  // And the size reads back as it was typed, in feet and inches.
+  await expect(editor).toContainText(`70'0" by 12'6"`)
+
+  // A dimension that is not a dimension says so, and the last good one stands.
+  await editor.getByLabel('Width, inches').fill('abc')
+  await expect(editor.getByRole('alert')).toContainText('whole inches')
+
+  const unchanged = await drawnSizes(page)
+  for (const size of unchanged) {
+    expect(Math.abs(size.height - 150 * 0.0254 * scale)).toBeLessThan(2)
+  }
 })
