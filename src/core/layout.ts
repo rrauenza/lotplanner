@@ -113,6 +113,21 @@ export function withEditedVehicle(layout: Layout, before: Vehicle, after: Vehicl
  * A Placement the caller did not name comes through as the very same object, so
  * an untouched neighbour costs nothing to carry into the next state.
  */
+/**
+ * The same Layout with one Placement turned, and nothing else about it changed.
+ *
+ * Turning is not moving: a vehicle that is turned stays where it is, and a
+ * vehicle that is moved keeps whatever angle it had.
+ */
+export function withRotatedPlacement(layout: Layout, id: string, rotationDegrees: number): Layout {
+  return {
+    ...layout,
+    placements: layout.placements.map((placement) =>
+      placement.id === id ? { ...placement, rotationDegrees } : placement,
+    ),
+  }
+}
+
 export function withMovedPlacement(layout: Layout, id: string, centre: Offset): Layout {
   return {
     ...layout,

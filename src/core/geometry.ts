@@ -144,6 +144,19 @@ export interface OrientedRectangle {
 /** A Site's working area. The same rectangle, under the name a Site uses for it. */
 export type SiteFrame = OrientedRectangle
 
+/**
+ * An angle as an orientation, in the half turn a person reads in.
+ *
+ * A rectangle at 195 degrees is the same rectangle as one at 15, so anything
+ * that compares angles compares these, and anything that shows one shows the
+ * equivalent inside this range rather than the number it arrived as.
+ */
+export function orientation(rotationDegrees: number): number {
+  const halfTurn = ((rotationDegrees % 180) + 180) % 180
+
+  return halfTurn > 90 ? halfTurn - 180 : halfTurn
+}
+
 /** An axis-aligned rectangle measured from a Site's origin, in ground metres. */
 export interface Extent {
   readonly centre: Offset

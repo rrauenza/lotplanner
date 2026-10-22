@@ -1,3 +1,4 @@
+import { orientation } from './geometry'
 import type { Vehicle } from './vehicle'
 
 /**
@@ -28,25 +29,13 @@ const AVERAGE_CHARACTER_WIDTH_RATIO = 0.55
 /**
  * The angle to turn a label by, given the angle of the rectangle under it.
  *
- * The text runs along the length of what it names, and a line of text reads
- * left to right at rest while the length of a vehicle runs north, so the text is
- * a quarter turn behind the rectangle it sits on.
+ * The text runs along the length of what it names, and a line of text reads left
+ * to right at rest while the length of a vehicle runs north - so the text sits a
+ * quarter turn behind the rectangle it is written on. The answer comes back as
+ * an orientation, because a name upside down is worse than no name at all.
  */
 export function labelRotationFor(rotationDegrees: number): number {
-  return upright(rotationDegrees - 90)
-}
-
-/**
- * The same angle, turned as far as it takes to keep the text the right way up.
- *
- * Screen angles repeat every half turn as far as reading is concerned, so any
- * angle outside the range a person reads in can be replaced by the equivalent
- * one inside it. A name upside down is worse than no name.
- */
-function upright(rotationDegrees: number): number {
-  const halfTurn = ((rotationDegrees % 180) + 180) % 180
-
-  return halfTurn > 90 ? halfTurn - 180 : halfTurn
+  return orientation(rotationDegrees - 90)
 }
 
 /**

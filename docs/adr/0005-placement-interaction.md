@@ -16,8 +16,9 @@ rectangle, and a generous pad then swallows touches meant for the map. The model
 - A **lock toggle** makes every gesture pan, for reviewing a finished layout and for bulk panning
   while placing many.
 - A **long-press** selects as an alternative to a tap, for small or overlapping targets.
-- Rotation and placement snap to **candidate angles**: the Site Frame's rotation ± multiples of
-  **15°**, plus the angles of nearby Placements.
+- Rotation snaps to **candidate angles**: the Site Frame's own rotation, plus the angles of the
+  Placements already in the Layout. A vehicle can still be set to **any angle at all** - the
+  candidates are a magnet rather than a set of permitted positions.
 
 Absolute north-relative snapping is deliberately **not** used. A lot is typically not aligned to
 north, so snapping to 15°/45°/90° from north pulls vehicles off the row they are meant to match.
@@ -31,6 +32,11 @@ The Site Frame supplies the axes that north cannot.
   it adds a step to every adjustment and bulk work suffers.
 - **Long-press alone.** Rejected: unambiguous and familiar, but a 300–500 ms hold before each
   adjustment is tedious when placing dozens.
+- **A 15° ladder around the frame.** This ADR said so until a vehicle could be placed and turned at
+  all. It turned out to buy convenience rather than capability - a 45 or a 60 degree arrangement
+  inside the frame - while costing a step size, a tolerance that then had to fight that step size,
+  and an answer for every angle exactly halfway between two candidates. The case that matters is a
+  row lining up with a row already laid, and no ladder reaches it: only the vehicles themselves do.
 - **North-relative angle snapping.** Rejected for the reason above.
 - **A per-Layout frame drawn in-app, or rotating the map view.** Rejected: the frame is a property
   of the _place_, so it belongs to the Site; and Leaflet has no map bearing, so view rotation would

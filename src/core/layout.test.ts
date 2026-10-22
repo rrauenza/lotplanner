@@ -6,6 +6,7 @@ import {
   rectangleOf,
   withEditedVehicle,
   withMovedPlacement,
+  withRotatedPlacement,
   withPlacement,
   type Placement,
 } from './layout'
@@ -43,6 +44,10 @@ function centreOf(layout: { readonly placements: readonly Placement[] }, id: str
 
 function vehicleOf(layout: { readonly placements: readonly Placement[] }, id: string) {
   return layout.placements.find((each) => each.id === id)?.vehicle
+}
+
+function rotationOf(layout: { readonly placements: readonly Placement[] }, id: string) {
+  return layout.placements.find((each) => each.id === id)?.rotationDegrees
 }
 
 describe('a Layout', () => {
@@ -111,6 +116,16 @@ describe('changing a Layout', () => {
     const moved = withMovedPlacement(start, 'nobody', { eastMetres: 1, northMetres: 1 })
 
     expect(moved.placements[0]).toBe(start.placements[0])
+  })
+
+  it('turns one Placement and leaves the others pointing where they were', () => {
+    const start = withPlacement(withPlacement(newLayout(SITE), at('one')), at('two'))
+    const turned = withRotatedPlacement(start, 'two', 37)
+
+    expect(rotationOf(turned, 'two')).toBe(37)
+    expect(rotationOf(turned, 'one')).toBe(90)
+    // And the state it was turned from has not turned.
+    expect(rotationOf(start, 'two')).toBe(90)
   })
 })
 
