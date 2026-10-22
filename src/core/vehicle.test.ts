@@ -52,15 +52,11 @@ describe('vehicle', () => {
     expect(() => make({ lengthInches: 199.5 })).toThrow()
   })
 
-  it('records a width including mirrors, and refuses one narrower than the body', () => {
-    // The body is 79 inches wide, so mirrors can only add to it.
-    expect(make({ mirrorsWidthInches: 79 }).mirrorsWidthInches).toBe(79)
-    expect(() => make({ mirrorsWidthInches: 78 })).toThrow()
-    expect(() => make({ mirrorsWidthInches: 79.5 })).toThrow()
-  })
-
-  it('leaves out a width including mirrors that nobody has looked up', () => {
-    expect(make().mirrorsWidthInches).toBeUndefined()
+  it('records the width it was published with, and that is the whole of it', () => {
+    // A width is a width: if the specifications quote it including the mirrors,
+    // that is the number to type in, because it is the number drawn. A
+    // rectangle here is an approximation rather than a measurement.
+    expect(make({ widthInches: 102 }).widthInches).toBe(102)
   })
 })
 
@@ -75,6 +71,5 @@ describe('sameVehicle', () => {
     expect(sameVehicle(make(), make({ widthInches: 80 }))).toBe(false)
     expect(sameVehicle(make(), make({ lengthInches: 200 }))).toBe(false)
     expect(sameVehicle(make(), make({ colour: '#000000' }))).toBe(false)
-    expect(sameVehicle(make(), make({ mirrorsWidthInches: 102 }))).toBe(false)
   })
 })

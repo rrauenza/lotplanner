@@ -20,14 +20,13 @@ const MAXIMUM_SHORT_LABEL_LENGTH = 12
 export interface Vehicle {
   readonly name: string
   readonly shortLabel: string
+  /**
+   * The published width. Whatever the specifications say it is - including
+   * mirrors if that is how they say it - because it is the width this is drawn
+   * at, and a rectangle here is an approximation rather than a measurement.
+   */
   readonly widthInches: number
   readonly lengthInches: number
-  /**
-   * The width with the mirrors out, when someone has looked it up. Not the width
-   * it is drawn at: this is the worst case, kept so that it can be asked about
-   * when the question is whether something squeezes through.
-   */
-  readonly mirrorsWidthInches?: number
   readonly colour: number
 }
 
@@ -37,8 +36,6 @@ export interface VehicleInput {
   readonly shortLabel?: string
   readonly widthInches: number
   readonly lengthInches: number
-  /** At least the body's width, because mirrors do not make a vehicle narrower. */
-  readonly mirrorsWidthInches?: number
   /** `#rgb`, `#rrggbb` or `0xRRGGBB`; a 24-bit integer is already one. */
   readonly colour: string | number
 }
@@ -46,27 +43,14 @@ export interface VehicleInput {
 /** A Vehicle from loose input, canonicalised, or an error saying what is wrong. */
 export function vehicle(input: VehicleInput): Vehicle {
   const name = canonicalName(input.name)
-  const widthInches = wholeInches(input.widthInches, 'width')
 
-  const built: Vehicle = {
+  return {
     name,
     shortLabel: canonicalShortLabel(input.shortLabel, name),
-    widthInches,
+    widthInches: wholeInches(input.widthInches, 'width'),
     lengthInches: wholeInches(input.lengthInches, 'length'),
     colour: parseColour(input.colour),
   }
-
-  if (input.mirrorsWidthInches === undefined) {
-    return built
-  }
-
-  const withMirrors = wholeInches(input.mirrorsWidthInches, 'width including mirrors')
-
-  if (withMirrors < widthInches) {
-    throw new Error('A width including mirrors cannot be narrower than the vehicle.')
-  }
-
-  return { ...built, mirrorsWidthInches: withMirrors }
 }
 
 /**
@@ -83,7 +67,6 @@ export function sameVehicle(left: Vehicle, right: Vehicle): boolean {
     left.shortLabel === right.shortLabel &&
     left.widthInches === right.widthInches &&
     left.lengthInches === right.lengthInches &&
-    left.mirrorsWidthInches === right.mirrorsWidthInches &&
     left.colour === right.colour
   )
 }
