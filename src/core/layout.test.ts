@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { offsetFromLatLng } from './geometry'
 import { newLayout, rectangleOf, withMovedPlacement, withPlacement, type Placement } from './layout'
 import type { Site } from './site'
 import { vehicle } from './vehicle'
@@ -48,6 +49,17 @@ describe('a Layout', () => {
     const frameless: Site = { id: SITE.id, name: SITE.name, origin: SITE.origin }
 
     expect(newLayout(frameless).frame).toBeUndefined()
+  })
+
+  it('carries the ground its picture covers, not only the frame inside it', () => {
+    // The frame is 137 by 98 m and the context margin is 150 m on every side, so
+    // the extent runs from 350.5 m west and 199 m south of the frame's centre to
+    // 86.5 m east and 199 m north of it.
+    const layout = newLayout(SITE)
+    const southWest = offsetFromLatLng(SITE.origin, layout.bounds.southWest)
+
+    expect(southWest.eastMetres).toBeCloseTo(-132 - 218.5, 3)
+    expect(southWest.northMetres).toBeCloseTo(199 - 199, 3)
   })
 })
 

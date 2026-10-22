@@ -4,6 +4,7 @@
   import { imageryEffects } from './browser/imagery-store'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
+  import type { Point } from './components/pointer'
   import type { Offset } from './core/geometry'
   import {
     IMAGERY_IDLE,
@@ -26,7 +27,7 @@
 
   /** The one thing the App asks of the map: where a screen point is on the ground. */
   interface MapHandle {
-    offsetAt(point: { readonly x: number; readonly y: number }): Offset | undefined
+    offsetAt(point: Point): Offset | undefined
   }
 
   let site: Site | undefined = $state(undefined)
@@ -72,7 +73,7 @@
   }
 
   /** A vehicle let go over the picture lands where it was let go. */
-  function dropFrom(vehicle: Vehicle, point: { readonly x: number; readonly y: number }): void {
+  function dropFrom(vehicle: Vehicle, point: Point): void {
     const at = mapView?.offsetAt(point)
     if (at !== undefined) {
       place(vehicle, at)

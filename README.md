@@ -9,8 +9,9 @@ whether they fit.
 
 ## Status
 
-Nothing is placed yet. The repository currently holds the design record, the spec, and the skeleton:
-it type-checks, lints, formats, tests and deploys.
+You can pick a place, see its photograph at true scale, drag a vehicle out of the palette onto it,
+and drag it around. Nothing is saved yet: a reload starts again from an empty piece of ground, and
+undo has not been built.
 
 - The domain vocabulary is in [`GLOSSARY.md`](./GLOSSARY.md).
 - The decisions and their reasons are in [`docs/adr/`](./docs/adr/).
@@ -52,9 +53,9 @@ or randomness. End-to-end tests drive real touch events in a real browser, becau
 the riskiest surface and a pure core cannot test a gesture. Leaflet's own rendering, the storage
 adapters, and the real network calls are deliberately untested.
 
-Neither seam has much to chew on yet. The unit test currently only proves the runner is connected,
-and the end-to-end test proves the built app is served from its subpath; both start earning their
-keep with the first feature ticket.
+Leaflet is not exempt from being _measured_, though, only from being tested: several end-to-end
+assertions ask Leaflet where it drew something, using its own geometry as a ruler for the app's. That
+is a check on the app's arithmetic against the photograph it asked for, not a test of the library.
 
 **The base path is `/lotplanner/`,** because GitHub Pages serves this from a repository subpath. The
 dev server and `yarn preview` both honour it, so a local run has the same shape as the deployment.

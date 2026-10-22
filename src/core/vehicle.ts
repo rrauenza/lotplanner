@@ -12,6 +12,8 @@
  * a Vehicle is a plain value that can be stored and shared with no parser.
  */
 
+import { parseColour } from './colour'
+
 const MAXIMUM_NAME_LENGTH = 64
 const MAXIMUM_SHORT_LABEL_LENGTH = 12
 
@@ -79,7 +81,15 @@ function strippedOfControlCharacters(raw: string): string {
   return withoutControlCharacters.normalize('NFD').normalize('NFC')
 }
 
-/** Given, or else as much of the name as a narrow rectangle can carry. */
+/**
+ * Given, or else as much of the name as a narrow rectangle can carry.
+ *
+ * The spec asks for a short label that is optional, at most twelve characters,
+ * and defaults to the name - which cannot all be true of a name that is sixty
+ * characters long. The reading taken is the useful one: with no label given, as
+ * much of the name as the cap allows is kept, so that a long name still has a
+ * short stand-in for the places where the whole of it will not fit.
+ */
 function canonicalShortLabel(given: string | undefined, name: string): string {
   const collapsed = (given ?? '').trim().replace(/\s+/g, ' ')
 
@@ -98,30 +108,4 @@ function wholeInches(value: number, what: string): number {
     throw new Error(`A vehicle ${what} has to be a whole number of inches.`)
   }
   return value
-}
-
-const SHORT_HEX = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i
-const SIX_DIGIT_HEX = /^(?:#|0x)([0-9a-f]{6})$/i
-
-/** A 24-bit integer, from any of the three shapes a colour is written in. */
-function parseColour(raw: string): number {
-  const text = raw.trim().toLowerCase()
-
-  const short = SHORT_HEX.exec(text)
-  if (short !== null) {
-    // #abc means #aabbcc, not #0a0b0c.
-    const digits = short
-      .slice(1)
-      .map((digit) => digit + digit)
-      .join('')
-    return Number.parseInt(digits, 16)
-  }
-
-  const long = SIX_DIGIT_HEX.exec(text)
-  if (long !== null) {
-    // All six digits, not the first pair: a colour is one number.
-    return Number.parseInt(long[1] ?? '', 16)
-  }
-
-  throw new Error(`A colour is #rgb, #rrggbb or 0xRRGGBB, not ${raw}.`)
 }

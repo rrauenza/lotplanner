@@ -230,13 +230,39 @@ async function dragFromPalette(page: Page, name: RegExp, to: Point): Promise<voi
   const chip = await page.getByRole('button', { name }).boundingBox()
   expect(chip).not.toBeNull()
 
-  const from = middleOf(chip ?? { x: 0, y: 0, width: 0, height: 0 })
+  await touchDrag(page, middleOf(chip ?? { x: 0, y: 0, width: 0, height: 0 }), to)
+}
 
-  await page.mouse.move(from.x, from.y)
-  await page.mouse.down()
-  // In steps, because a press that never travels is a tap rather than a drag.
-  await page.mouse.move(to.x, to.y, { steps: 8 })
-  await page.mouse.up()
+/**
+ * A drag of the kind a finger makes.
+ *
+ * Playwright's own touch support stops at tapping, so this drives Chromium's
+ * touch input directly. It is the reason this project has a second seam at all:
+ * the gesture model in ADR 0005 is the riskiest surface in the app, and none of
+ * it is reachable from a pure core.
+ */
+async function touchDrag(page: Page, from: Point, to: Point, steps = 8): Promise<void> {
+  const cdp = await page.context().newCDPSession(page)
+
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: from.x, y: from.y }],
+  })
+
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        {
+          x: from.x + ((to.x - from.x) * step) / steps,
+          y: from.y + ((to.y - from.y) * step) / steps,
+        },
+      ],
+    })
+  }
+
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
 }
 
 test('drops a vehicle where it is let go, at the size it publishes', async ({ page }) => {
@@ -324,11 +350,8 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   await page.touchscreen.tap(grab.x, grab.y)
   await expect(page.locator('path.placement.selected')).toHaveCount(1)
 
-  // A drag beginning on the vehicle moves the vehicle.
-  await page.mouse.move(grab.x, grab.y)
-  await page.mouse.down()
-  await page.mouse.move(grab.x + 140, grab.y - 70, { steps: 10 })
-  await page.mouse.up()
+  // A drag beginning on the vehicle moves the vehicle, by finger.
+  await touchDrag(page, grab, { x: grab.x + 140, y: grab.y - 70 }, 10)
 
   const moved = (await drawn.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 }
   expect(Math.abs(moved.x - before.x - 140)).toBeLessThan(2)
@@ -340,10 +363,12 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   const vehicleBefore = middleOf(moved)
   const frameBefore = middleOf((await guide.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })
 
-  await page.mouse.move(drop.x + 220, drop.y + 70)
-  await page.mouse.down()
-  await page.mouse.move(drop.x + 120, drop.y + 130, { steps: 10 })
-  await page.mouse.up()
+  await touchDrag(
+    page,
+    { x: drop.x + 220, y: drop.y + 70 },
+    { x: drop.x + 120, y: drop.y + 130 },
+    10,
+  )
 
   const vehicleAfter = middleOf((await drawn.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })
   const frameAfter = middleOf((await guide.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })

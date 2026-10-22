@@ -1,5 +1,12 @@
-import type { LatLng, Offset, OrientedRectangle, SiteFrame } from './geometry'
-import type { Site } from './site'
+import {
+  boundsForExtent,
+  type LatLng,
+  type LatLngBounds,
+  type Offset,
+  type OrientedRectangle,
+  type SiteFrame,
+} from './geometry'
+import { extentForSite, type Site } from './site'
 import { inchesToMetres } from './units'
 import type { Vehicle } from './vehicle'
 
@@ -35,6 +42,11 @@ export interface Layout {
   readonly siteName: string
   /** Where the Site's own (0, 0) is, so the Layout does not need the manifest. */
   readonly origin: LatLng
+  /**
+   * The ground the picture covers, so a Layout carries enough of its Site to be
+   * drawn on its own rather than only alongside the manifest it came from.
+   */
+  readonly bounds: LatLngBounds
   /** The frame it was worked in, embedded whole. A guide, never a limit. */
   readonly frame?: SiteFrame
   readonly placements: readonly Placement[]
@@ -46,6 +58,7 @@ export function newLayout(site: Site): Layout {
     siteId: site.id,
     siteName: site.name,
     origin: site.origin,
+    bounds: boundsForExtent(site.origin, extentForSite(site)),
     placements: [],
   }
 

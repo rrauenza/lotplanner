@@ -1,14 +1,9 @@
 <script lang="ts">
-  import { systemVehicles } from '../core/collection'
+  import { SYSTEM_COLLECTION_NAME, systemVehicles } from '../core/collection'
+  import { cssColour } from '../core/colour'
   import { toFeetAndInches } from '../core/units'
   import type { Vehicle } from '../core/vehicle'
-  import { cssColour } from './colour'
-
-  /** Somewhere on the screen, in the coordinates a pointer reports. */
-  interface Point {
-    readonly x: number
-    readonly y: number
-  }
+  import { isDragStart, type Point } from './pointer'
 
   interface Props {
     /** A vehicle was dragged off the palette and let go here. */
@@ -30,7 +25,7 @@
   function picked(vehicle: Vehicle, event: PointerEvent): void {
     // One finger, one vehicle: a second finger, or anything but the left button,
     // is not a drag.
-    if (!event.isPrimary || event.button !== 0) {
+    if (!isDragStart(event)) {
       return
     }
 
@@ -63,7 +58,9 @@
 <svelte:window onpointermove={moved} onpointerup={released} onpointercancel={cancelled} />
 
 <aside aria-label="Vehicles">
-  <h2>Vehicles</h2>
+  <!-- The panel is the vehicles; the heading names the collection they are from,
+       which is the System Collection until this app has collections of its own. -->
+  <h2>{SYSTEM_COLLECTION_NAME}</h2>
   <ul>
     {#each systemVehicles as vehicle (vehicle.name)}
       <li>

@@ -6,6 +6,7 @@
     containsPoint,
     cornersOf,
     latLngFromOffset,
+    metresPerPixel,
     offsetFromLatLng,
     type LatLng,
     type LatLngBounds,
@@ -15,10 +16,16 @@
   import type { ImageryPlan } from '../core/imagery'
   import { LABEL_FONT_PIXELS, labelFor, labelRotationFor } from '../core/label'
   import { rectangleOf, type Placement } from '../core/layout'
-  import { cssColour } from './colour'
+  import { cssColour } from '../core/colour'
+  import { isDragStart, type Point } from './pointer'
 
-  /** How far past a drawn rectangle a fingertip still counts as on it. */
-  const HIT_PADDING_METRES = 0.75
+  /**
+   * How far past a drawn vehicle a fingertip still counts as being on it, in
+   * screen pixels rather than in metres. A vehicle is two metres across and a
+   * fingertip is not, and a fixed number of metres would be invisible exactly
+   * when it is needed - zoomed out, where a car is a handful of pixels.
+   */
+  const HIT_PADDING_PIXELS = 8
 
   interface Props {
     /** An object url for the picture, already fetched. */
@@ -57,7 +64,7 @@
    * map. The palette asks this when a vehicle is let go over the picture; the
    * press handler asks it about its own finger.
    */
-  export function offsetAt(point: { readonly x: number; readonly y: number }): Offset | undefined {
+  export function offsetAt(point: Point): Offset | undefined {
     const current = map
     if (current === undefined) {
       return undefined
@@ -91,6 +98,22 @@
     return L.latLngBounds(toTuple(bounds.southWest), toTuple(bounds.northEast))
   }
 
+  /**
+   * The padding above, in ground metres, which is the only form `containsPoint`
+   * can use and which changes with the zoom. The map's own scale answers it,
+   * from the same core function that decides what true scale means.
+   */
+  function hitPaddingMetres(): number {
+    const current = map
+    if (current === undefined) {
+      return 0
+    }
+
+    const centre = current.getCenter()
+
+    return HIT_PADDING_PIXELS * metresPerPixel(centre.lat, current.getZoom())
+  }
+
   function pressed(event: PointerEvent): void {
     const current = map
     if (current === undefined) {
@@ -103,7 +126,7 @@
       stopMoving(current)
       return
     }
-    if (event.button !== 0) {
+    if (!isDragStart(event)) {
       return
     }
 
@@ -115,7 +138,7 @@
     // Last drawn first, so the vehicle on top is the one that is grabbed.
     const hit = [...placements]
       .reverse()
-      .find((each) => containsPoint(rectangleOf(each), here, HIT_PADDING_METRES))
+      .find((each) => containsPoint(rectangleOf(each), here, hitPaddingMetres()))
 
     if (hit === undefined) {
       onselect(undefined)
@@ -148,7 +171,8 @@
     }
 
     // The vehicle keeps the grip it was taken by, so it does not jump under the
-    // finger - including when the finger wanders off the map and back.
+    // finger. A finger that leaves the map stops moving it and one that comes
+    // back carries on from where it left off, rather than snapping to itself.
     dragged = {
       eastMetres: here.eastMetres + moving.grab.eastMetres,
       northMetres: here.northMetres + moving.grab.northMetres,
@@ -320,6 +344,13 @@
 
 <svelte:window onpointermove={moved} onpointerup={released} onpointercancel={cancelled} />
 
+<!-- The map is a pointer-driven canvas. The spec exempts it from the
+     accessibility baseline and asks for that to be documented rather than left
+     ambiguous, so this is the documentation: buttons, the palette and the
+     photograph's credit line are all focusable and labelled, and the palette is
+     operable by keyboard, while moving and turning a vehicle are pointer-only
+     by design. -->
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="map"
   bind:this={element}
