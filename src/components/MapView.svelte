@@ -3,6 +3,7 @@
   import 'leaflet/dist/leaflet.css'
 
   import {
+    bearingBetween,
     containsPoint,
     cornersOf,
     latLngFromOffset,
@@ -17,6 +18,7 @@
   import { LABEL_FONT_PIXELS, labelFor, labelRotationFor } from '../core/label'
   import { rectangleOf, type Placement } from '../core/layout'
   import { cssColour } from '../core/colour'
+  import { snapAngle, snapCandidates } from '../core/snapping'
   import { isDragStart, type Point } from './pointer'
 
   /**
@@ -26,6 +28,9 @@
    * when it is needed - zoomed out, where a car is a handful of pixels.
    */
   const HIT_PADDING_PIXELS = 8
+
+  /** The diameter of the handle a vehicle is turned by, in screen pixels. */
+  const HANDLE_PIXELS = 26
 
   interface Props {
     /** An object url for the picture, already fetched. */
@@ -41,9 +46,11 @@
     selectedId: string | undefined
     onselect: (id: string | undefined) => void
     onmove: (id: string, centre: Offset) => void
+    onrotate: (id: string, rotationDegrees: number) => void
   }
 
-  let { imageUrl, plan, origin, frame, placements, selectedId, onselect, onmove }: Props = $props()
+  let { imageUrl, plan, origin, frame, placements, selectedId, onselect, onmove, onrotate }: Props =
+    $props()
 
   let element: HTMLDivElement
 
@@ -58,6 +65,12 @@
 
   /** Where a carried vehicle is this instant, before the move is committed. */
   let dragged = $state<Offset | undefined>(undefined)
+
+  /** A turn in progress: what is being turned, and the angle it was taken hold at. */
+  let turning: { readonly id: string; readonly grip: number } | undefined = undefined
+
+  /** The angle a vehicle is being turned through, before the turn is committed. */
+  let turned = $state<number | undefined>(undefined)
 
   /**
    * Where a point on the screen is on the ground, or nothing when it is off the
@@ -114,16 +127,76 @@
     return HIT_PADDING_PIXELS * metresPerPixel(centre.lat, current.getZoom())
   }
 
+  /**
+   * What a vehicle being turned may snap to: the angle the space itself is at,
+   * and the angles of the other vehicles already on the ground here. Never north.
+   */
+  function candidatesFor(id: string): number[] {
+    return snapCandidates(
+      frame?.rotationDegrees,
+      placements.filter((each) => each.id !== id).map((each) => each.rotationDegrees),
+    )
+  }
+
+  /**
+   * Where the handle sits: just past the nose of a vehicle, along its length, a
+   * fixed number of screen pixels out.
+   *
+   * In pixels rather than metres because the handle is a finger target at every
+   * zoom, and past the nose rather than on it because turning a vehicle and
+   * moving one must never be the same press.
+   */
+  function handlePoint(corners: readonly LatLng[]): LatLng | undefined {
+    const current = map
+    if (current === undefined) {
+      return undefined
+    }
+
+    const [first, second, third, fourth] = corners.map((corner) =>
+      current.latLngToContainerPoint(toTuple(corner)),
+    )
+
+    if (
+      first === undefined ||
+      second === undefined ||
+      third === undefined ||
+      fourth === undefined
+    ) {
+      return undefined
+    }
+
+    // The corners arrive walking the perimeter, so the first pair is the nose
+    // and the second is the tail.
+    const nose = first.add(second).divideBy(2)
+    const tail = third.add(fourth).divideBy(2)
+    const along = nose.subtract(tail)
+    const length = Math.hypot(along.x, along.y)
+
+    if (length === 0) {
+      return undefined
+    }
+
+    const at = current.containerPointToLatLng(
+      L.point(
+        nose.x + (along.x / length) * HANDLE_PIXELS,
+        nose.y + (along.y / length) * HANDLE_PIXELS,
+      ),
+    )
+
+    return { latitude: at.lat, longitude: at.lng }
+  }
+
   function pressed(event: PointerEvent): void {
     const current = map
     if (current === undefined) {
       return
     }
 
-    // A second finger on a vehicle being moved is not a second move: it is
-    // someone pinching, so the move is abandoned and the map gets both fingers.
+    // A second finger on a vehicle being handled is not a second gesture: it is
+    // someone pinching, so the gesture is abandoned and the map gets both fingers.
     if (!event.isPrimary) {
       stopMoving(current)
+      stopTurning(current)
       return
     }
     if (!isDragStart(event)) {
@@ -132,6 +205,23 @@
 
     const here = offsetAt({ x: event.clientX, y: event.clientY })
     if (here === undefined) {
+      return
+    }
+
+    // A press on the handle turns the vehicle it belongs to, and never moves it.
+    if (event.target instanceof Element && event.target.closest('.rotation-handle') !== null) {
+      const chosen = placements.find((each) => each.id === selectedId)
+      if (chosen === undefined) {
+        return
+      }
+
+      // The grip is the angle the handle was taken hold of at, relative to the
+      // vehicle's own angle, so that turning does not jump under the finger.
+      turning = {
+        id: chosen.id,
+        grip: bearingBetween(chosen.centre, here) - chosen.rotationDegrees,
+      }
+      current.dragging.disable()
       return
     }
 
@@ -161,12 +251,26 @@
   }
 
   function moved(event: PointerEvent): void {
-    if (moving === undefined) {
+    const here = offsetAt({ x: event.clientX, y: event.clientY })
+    if (here === undefined) {
       return
     }
 
-    const here = offsetAt({ x: event.clientX, y: event.clientY })
-    if (here === undefined) {
+    const spin = turning
+    if (spin !== undefined) {
+      const chosen = placements.find((each) => each.id === spin.id)
+      if (chosen === undefined) {
+        return
+      }
+
+      // Snapped as it turns rather than only on release, so a vehicle can be seen
+      // to settle onto the row it is being lined up with.
+      turned = snapAngle(bearingBetween(chosen.centre, here) - spin.grip, candidatesFor(spin.id))
+      return
+    }
+
+    const carry = moving
+    if (carry === undefined) {
       return
     }
 
@@ -174,12 +278,25 @@
     // finger. A finger that leaves the map stops moving it and one that comes
     // back carries on from where it left off, rather than snapping to itself.
     dragged = {
-      eastMetres: here.eastMetres + moving.grab.eastMetres,
-      northMetres: here.northMetres + moving.grab.northMetres,
+      eastMetres: here.eastMetres + carry.grab.eastMetres,
+      northMetres: here.northMetres + carry.grab.northMetres,
     }
   }
 
   function released(): void {
+    const spin = turning
+
+    if (spin !== undefined) {
+      const settled = turned
+
+      stopTurning(map)
+
+      if (settled !== undefined) {
+        onrotate(spin.id, settled)
+      }
+      return
+    }
+
     if (moving === undefined) {
       return
     }
@@ -196,6 +313,7 @@
 
   function cancelled(): void {
     stopMoving(map)
+    stopTurning(map)
   }
 
   function stopMoving(current: L.Map | undefined): void {
@@ -205,6 +323,16 @@
 
     moving = undefined
     dragged = undefined
+    current?.dragging.enable()
+  }
+
+  function stopTurning(current: L.Map | undefined): void {
+    if (turning === undefined) {
+      return
+    }
+
+    turning = undefined
+    turned = undefined
     current?.dragging.enable()
   }
 
@@ -239,6 +367,25 @@
       fillOpacity: selected ? 0.6 : 0.4,
       interactive: false,
     }).addTo(into)
+
+    if (selected) {
+      const at = handlePoint(corners)
+
+      if (at !== undefined) {
+        L.marker(toTuple(at), {
+          icon: L.divIcon({
+            className: 'rotation-handle',
+            iconSize: L.point(HANDLE_PIXELS, HANDLE_PIXELS),
+          }),
+          // Interactive so that the element is hit-testable at all: the gesture
+          // reads the event's target, and a marker that takes no pointer events
+          // is a handle nobody can take hold of.
+          interactive: true,
+          keyboard: false,
+          zIndexOffset: 1000,
+        }).addTo(into)
+      }
+    }
 
     const text = labelFor(placement.vehicle, screenLength(corners))
     if (text === undefined) {
@@ -312,12 +459,16 @@
 
     const chosen = selectedId
     const carried = dragged
+    const spun = turned
 
-    const shown = placements.map((placement) =>
-      carried !== undefined && moving?.id === placement.id
-        ? { ...placement, centre: carried }
-        : placement,
-    )
+    // What is drawn, which is the layout with anything in flight laid over it:
+    // a vehicle being carried is where the finger is, and one being turned is at
+    // the angle the finger has reached.
+    const shown = placements.map((placement) => ({
+      ...placement,
+      ...(carried !== undefined && moving?.id === placement.id ? { centre: carried } : {}),
+      ...(spun !== undefined && turning?.id === placement.id ? { rotationDegrees: spun } : {}),
+    }))
 
     const drawAll = (): void => {
       into.clearLayers()

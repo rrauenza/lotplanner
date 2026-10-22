@@ -19,6 +19,7 @@
     newLayout,
     withEditedVehicle,
     withMovedPlacement,
+    withRotatedPlacement,
     withPlacement,
     type Layout,
     type Placement,
@@ -124,6 +125,12 @@
     }
   }
 
+  function rotatePlacement(id: string, rotationDegrees: number): void {
+    if (layout !== undefined) {
+      layout = withRotatedPlacement(layout, id, rotationDegrees)
+    }
+  }
+
   $effect(() => {
     const current = plan
     if (current === undefined) {
@@ -215,6 +222,7 @@
         {selectedId}
         onselect={selectPlacement}
         onmove={movePlacement}
+        onrotate={rotatePlacement}
       />
       {#if selectedVehicle !== undefined}
         <!-- A sheet over the photograph rather than a row under it, so that

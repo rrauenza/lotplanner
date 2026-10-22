@@ -278,6 +278,31 @@ async function touchDrag(page: Page, from: Point, to: Point, steps = 8): Promise
   await cdp.detach()
 }
 
+/** Take hold of the selected vehicle's handle and turn it to a bearing. */
+async function turnTo(page: Page, centre: Point, degrees: number): Promise<void> {
+  const handle = await page.locator('.rotation-handle').boundingBox()
+  expect(handle).not.toBeNull()
+
+  const grip = middleOf(handle ?? { x: 0, y: 0, width: 0, height: 0 })
+  const reach = Math.hypot(grip.x - centre.x, grip.y - centre.y)
+  const radians = (degrees * Math.PI) / 180
+
+  await touchDrag(page, grip, {
+    x: centre.x + reach * Math.sin(radians),
+    y: centre.y - reach * Math.cos(radians),
+  })
+}
+
+/** The angle a vehicle's label is drawn at, which is its own angle turned back. */
+async function labelAngle(page: Page, index = 0): Promise<number> {
+  const style = await page.locator('.placement-label').nth(index).getAttribute('style')
+  const found = /rotate\((-?[\d.]+)deg\)/.exec(style ?? '')
+
+  expect(found).not.toBeNull()
+
+  return Number(found?.[1] ?? '0')
+}
+
 test('drops a vehicle where it is let go, at the size it publishes', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)
@@ -463,4 +488,63 @@ test('corrects a vehicle, and every copy of it at once', async ({ page }) => {
   for (const size of unchanged) {
     expect(Math.abs(size.height - 150 * 0.0254 * scale)).toBeLessThan(2)
   }
+})
+
+test('turns a vehicle, and it settles onto the angle the space is at', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drop = await middleOfTheMap(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+
+  // The handle belongs to the selected vehicle, and only to it.
+  await expect(page.locator('.rotation-handle')).toHaveCount(1)
+
+  // The fixture frame lies at 90 degrees and a new vehicle takes its angle, so
+  // the label reads straight across the screen.
+  const label = page.locator('.placement-label')
+  await expect(label).toHaveAttribute('style', /rotate\(0deg\)/)
+
+  // Turned to 60 degrees, which is nowhere near any candidate: it stays there,
+  // because any angle at all is possible and the candidates are a magnet. A
+  // degree of slack, because the touch point is rounded to whole pixels.
+  await turnTo(page, drop, 60)
+  expect(Math.abs((await labelAngle(page)) + 30)).toBeLessThan(1)
+
+  // Turned to about 93, which is three degrees from the frame's own 90 and so
+  // inside the tolerance. It settles back onto the space it is in.
+  await turnTo(page, drop, 93)
+  expect(Math.abs(await labelAngle(page))).toBeLessThan(0.001)
+})
+
+test('turns a vehicle onto the row already laid', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const map = await middleOfTheMap(page)
+  const first = { x: map.x - 90, y: map.y }
+  const second = { x: map.x + 90, y: map.y }
+
+  // One vehicle set by hand at about 37 degrees, which no candidate offers: the
+  // space is at 90 and there is nothing else on the ground yet.
+  await dragFromPalette(page, /Semi \+ 53 ft/, first)
+  await turnTo(page, first, 37)
+
+  const byHand = await labelAngle(page)
+  expect(Math.abs(byHand + 53)).toBeLessThan(1.5)
+
+  // A second vehicle, turned to about 41. The space's 90 is half a circle away;
+  // the first vehicle is four degrees away, so that is what it lines up with.
+  await dragFromPalette(page, /Semi \+ 53 ft/, second)
+  await turnTo(page, second, 41)
+
+  const labels = page.locator('.placement-label')
+  await expect(labels).toHaveCount(2)
+
+  // Lined up with the row already laid to the last decimal, because it took the
+  // first vehicle's own angle rather than the space's.
+  expect(Math.abs(byHand)).toBeGreaterThan(10)
+  expect(await labelAngle(page, 1)).toBe(byHand)
 })
