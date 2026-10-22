@@ -1,15 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  HISTORY_LIMIT,
-  canRedo,
-  canUndo,
-  edit,
-  redo,
-  startEditing,
-  undo,
-  type Editor,
-} from './editor'
+import { EDIT_LIMIT, canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './editor'
 import {
   duplicateOf,
   newLayout,
@@ -108,36 +99,42 @@ describe('undo and redo', () => {
 
     let editor = startEditing(start)
 
-    for (const [, make] of kinds) {
+    // What the Layout looked like immediately before each kind of edit, so that
+    // each undo can be checked against the state it is supposed to put back.
+    const tabulated: { readonly does: string; readonly then: Layout }[] = []
+
+    for (const [does, make] of kinds) {
+      tabulated.push({ does, then: editor.present })
       editor = edit(editor, make(editor.present))
     }
 
-    // Six kinds of edit, so undoing until there is nothing left gets all the way
-    // back to where it began, one kind at a time.
-    let took = 0
-
-    while (canUndo(editor)) {
+    // Six kinds of edit, so undoing walks back through all six, newest first.
+    for (const { does, then } of [...tabulated].reverse()) {
       editor = undo(editor)
-      took += 1
+
+      // The very snapshot that was on the ground before that edit, rather than
+      // a rebuilt one: undo is a pop, which is what makes it dependable for
+      // edits of every shape.
+      expect(editor.present, `after undoing: ${does}`).toBe(then)
     }
 
-    expect(took).toBe(kinds.length)
     expect(ids(editor.present)).toEqual([])
+    expect(canUndo(editor)).toBe(false)
     expect(canRedo(editor)).toBe(true)
   })
 
   it('forgets the oldest edits once there are more than the cap', () => {
     let editor = startEditing(start)
 
-    for (let step = 0; step < HISTORY_LIMIT + 10; step += 1) {
+    for (let step = 0; step < EDIT_LIMIT + 10; step += 1) {
       editor = edit(editor, withPlacement(editor.present, at(`step-${String(step)}`)))
     }
 
-    expect(editor.past).toHaveLength(HISTORY_LIMIT)
+    expect(editor.past).toHaveLength(EDIT_LIMIT)
 
     // And it reaches back exactly that far, no further: undoing everything there
     // is to undo leaves the oldest state it still holds.
-    for (let step = 0; step < HISTORY_LIMIT; step += 1) {
+    for (let step = 0; step < EDIT_LIMIT; step += 1) {
       editor = undo(editor)
     }
 

@@ -39,9 +39,9 @@
   let site: Site | undefined = $state(undefined)
 
   /**
-   * The editing history. What is on the ground is always the top of it, and every
-   * change goes through `change` below - so undo works for all of them without
-   * any of them knowing that undo exists.
+   * The Editor: what is on the ground is always the top of it, and every change
+   * goes through `change` below - so undo works for all of them without any of
+   * them knowing that undo exists.
    */
   let editor = $state<Editor | undefined>(undefined)
 
@@ -61,7 +61,7 @@
   )
 
   /**
-   * Put an edit on the history. Every change to a Layout goes through here, which
+   * Put an edit on the Editor. Every change to a Layout goes through here, which
    * is what makes undo work for all of them at once.
    */
   function change(next: Layout): void {
@@ -69,6 +69,10 @@
       editor = edit(editor, next)
     }
   }
+
+  /** Whether there is anywhere to go back to, or forward to. */
+  const undoable = $derived(editor !== undefined && canUndo(editor))
+  const redoable = $derived(editor !== undefined && canRedo(editor))
 
   function undoEdit(): void {
     if (editor !== undefined) {
@@ -97,6 +101,12 @@
       return
     }
 
+    // A box someone is typing in has its own undo, and its own idea of what Ctrl
+    // and Z mean. Taking the keystroke would be taking it from what they typed.
+    if (event.target instanceof HTMLElement && isTypingIn(event.target)) {
+      return
+    }
+
     event.preventDefault()
 
     if (event.shiftKey) {
@@ -104,6 +114,11 @@
     } else {
       undoEdit()
     }
+  }
+
+  /** Whether the thing a keystroke is aimed at takes text. */
+  function isTypingIn(target: HTMLElement): boolean {
+    return target.isContentEditable || target.closest('input, textarea, select') !== null
   }
 
   /** The Placement that is selected, if one is. */
@@ -336,19 +351,13 @@
     </div>
     <!-- Always reachable, and never inside the selection's sheet: undoing a
          delete has to be possible when nothing is selected any more. -->
-    <div class="history">
-      <button
-        type="button"
-        title="Ctrl and Z"
-        disabled={editor === undefined || !canUndo(editor)}
-        onclick={undoEdit}>Undo</button
-      >
-      <button
-        type="button"
-        title="Ctrl, Shift and Z"
-        disabled={editor === undefined || !canRedo(editor)}
-        onclick={redoEdit}>Redo</button
-      >
+    <div class="bar">
+      <button type="button" title="Ctrl and Z" disabled={!undoable} onclick={undoEdit}>
+        Undo
+      </button>
+      <button type="button" title="Ctrl, Shift and Z" disabled={!redoable} onclick={redoEdit}>
+        Redo
+      </button>
     </div>
     <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
     <!-- Here even before it is known, so that the credit arriving cannot resize
@@ -423,15 +432,6 @@
     display: flex;
     gap: 0.5rem;
     margin-bottom: 0.5rem;
-  }
-
-  .history {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .history button {
-    padding: 0.25rem 0.75rem;
   }
 
   .bar button {

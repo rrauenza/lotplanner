@@ -598,23 +598,125 @@ test('undoes and redoes, by the buttons and by the keyboard', async ({ page }) =
   await page.keyboard.press('Control+Shift+z')
   await expect(drawn).toHaveCount(2)
   await expect(redoButton).toBeDisabled()
+})
 
-  // An edit made after undoing is a new history: what was undone is not
-  // something to go forward to any more.
+test('forgets what was undone once there is a new edit', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  const undoButton = page.getByRole('button', { name: 'Undo' })
+  const redoButton = page.getByRole('button', { name: 'Redo' })
+
+  const drop = await middleOfTheMap(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: drop.x + 80, y: drop.y + 70 })
+  await expect(drawn).toHaveCount(2)
+
   await undoButton.click()
   await expect(drawn).toHaveCount(1)
   await expect(redoButton).toBeEnabled()
 
+  // An edit made after undoing starts a new line of edits: what was undone is
+  // not something to go forward to any more.
   await dragFromPalette(page, /Semi \+ 53 ft/, { x: drop.x - 80, y: drop.y - 70 })
   await expect(drawn).toHaveCount(2)
   await expect(redoButton).toBeDisabled()
+})
 
-  // Deleting is one of the edits undo reverses, and the one just placed is
-  // already the selected one, so its own controls are up.
-  await page.getByRole('button', { name: 'Delete' }).click()
+test('undoes a delete, and the vehicle comes back where it was', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  await dragFromPalette(page, /Semi \+ 53 ft/, await middleOfTheMap(page))
   await expect(drawn).toHaveCount(1)
-  await undoButton.click()
-  await expect(drawn).toHaveCount(2)
+
+  const before = await drawn.boundingBox()
+
+  // Dropping it left it selected, so its own Delete is up without a tap.
+  await page.getByRole('button', { name: 'Delete' }).click()
+  await expect(drawn).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(drawn).toHaveCount(1)
+
+  // Selected again before measuring, so that what it is compared against was
+  // drawn the same way: a selected rectangle wears a thicker outline, which is
+  // a pixel of difference in its box.
+  const middle = middleOf(before ?? { x: 0, y: 0, width: 0, height: 0 })
+  await page.touchscreen.tap(middle.x, middle.y)
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+
+  // Back in the same place, not merely back.
+  const after = await drawn.boundingBox()
+  expect(Math.abs((after?.x ?? 0) - (before?.x ?? 0))).toBeLessThan(1)
+  expect(Math.abs((after?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(1)
+})
+
+test('undoes a correction, and the form shows the size that comes back', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await dragFromPalette(page, /Semi \+ 53 ft/, await middleOfTheMap(page))
+
+  const scale = await pixelsPerMetre(page)
+  const editor = page.getByRole('region', { name: 'The selected vehicle' })
+
+  // As published: 8 foot 6 wide.
+  await expect(editor.getByLabel('Width, feet')).toHaveValue('8')
+  await expect(editor.getByLabel('Width, inches')).toHaveValue('6')
+  const asPublished = await drawnSizes(page)
+  expect(asPublished).toHaveLength(1)
+
+  await editor.getByLabel('Width, feet').fill('12')
+  await editor.getByLabel('Width, inches').fill('6')
+  await expect(editor).toContainText(`70'0" by 12'6"`)
+
+  await page.getByRole('button', { name: 'Undo' }).click()
+
+  // The boxes have to follow the vehicle back, or the form goes on showing a
+  // size that is nowhere on the ground.
+  await expect(editor.getByLabel('Width, feet')).toHaveValue('8')
+  await expect(editor.getByLabel('Width, inches')).toHaveValue('6')
+  await expect(editor).toContainText(`70'0" by 8'6"`)
+
+  const undone = await drawnSizes(page)
+  expect(Math.abs((undone[0]?.height ?? 0) - 102 * 0.0254 * scale)).toBeLessThan(2)
+
+  // And a keystroke after that corrects what is now stored rather than putting
+  // the undone size back.
+  await editor.getByLabel('Name').fill('Semi with a longer name')
+  await expect(editor.getByLabel('Width, inches')).toHaveValue('6')
+
+  const afterTyping = await drawnSizes(page)
+  expect(Math.abs((afterTyping[0]?.height ?? 0) - 102 * 0.0254 * scale)).toBeLessThan(2)
+})
+
+test('leaves Ctrl and Z alone in a box someone is typing in', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  const redoButton = page.getByRole('button', { name: 'Redo' })
+
+  await dragFromPalette(page, /Semi \+ 53 ft/, await middleOfTheMap(page))
+  await expect(drawn).toHaveCount(1)
+
+  const editor = page.getByRole('region', { name: 'The selected vehicle' })
+  const name = editor.getByLabel('Name')
+  await name.fill('Semi, in the box')
+
+  // The box has its own undo, and taking the keystroke from it would be taking
+  // it from what someone typed. A layout edit undone instead would show up as a
+  // step forward becoming available.
+  await name.press('Control+z')
+  await expect(drawn).toHaveCount(1)
+  await expect(redoButton).toBeDisabled()
 })
 
 test('makes three in three taps, and takes one away', async ({ page }) => {

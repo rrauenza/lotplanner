@@ -18,9 +18,9 @@
   // not a dimension yet, and rounding one into the other mid-keystroke would be
   // fighting whoever is typing.
   // Read once, deliberately: the form starts from this vehicle and then belongs
-  // to whoever is typing in it. A new selection remounts the component, so no
-  // draft ever outlives the vehicle it was made for, and the untracked read
-  // says that out loud rather than leaving it to be inferred.
+  // to whoever is typing in it. A new selection remounts the component, and a
+  // change to this vehicle from outside is taken up by the effect below, so no
+  // draft outlives the vehicle it was made for either way.
   let name = $state(untrack(() => of.name))
   let shortLabel = $state(untrack(() => of.shortLabel))
   let widthFeet = $state(untrack(() => feetOf(of.widthInches)))
@@ -29,6 +29,13 @@
   let lengthInches = $state(untrack(() => remainderOf(of.lengthInches)))
   let colour = $state(untrack(() => cssColour(of.colour)))
   let complaint = $state('')
+
+  /**
+   * The vehicle the boxes were last known to describe - what this form last
+   * handed over, or what it last took from outside. Not reactive: it is a
+   * bookmark for comparing against, never something rendered.
+   */
+  let describing = untrack(() => of)
 
   function feetOf(totalInches: number): string {
     return String(Math.floor(totalInches / 12))
@@ -66,6 +73,8 @@
         colour,
       })
 
+      describing = corrected
+
       if (
         !sameVehicle(
           corrected,
@@ -79,6 +88,39 @@
       complaint = error instanceof Error ? error.message : 'That is not a vehicle.'
     }
   })
+
+  /*
+   * The vehicle can also change without anyone typing here: undo puts back the
+   * size that was there before, and another copy of the same vehicle being
+   * corrected carries this one with it. Either way the boxes have to show what
+   * is now stored, or the form would go on displaying a size that is nowhere on
+   * the ground - and the next keystroke would put it back.
+   *
+   * The echo of this form's own edit is the vehicle the boxes describe, so it is
+   * recognised and changes nothing. Only the stored vehicle is tracked, so this
+   * does not run on every keystroke.
+   */
+  $effect(() => {
+    const stored = of
+
+    if (sameVehicle(stored, describing)) {
+      return
+    }
+
+    take(stored)
+  })
+
+  /** Put a vehicle into the boxes, as the one they describe from now on. */
+  function take(next: Vehicle): void {
+    name = next.name
+    shortLabel = next.shortLabel
+    widthFeet = feetOf(next.widthInches)
+    widthInches = remainderOf(next.widthInches)
+    lengthFeet = feetOf(next.lengthInches)
+    lengthInches = remainderOf(next.lengthInches)
+    colour = cssColour(next.colour)
+    describing = next
+  }
 </script>
 
 <section aria-label="The selected vehicle">
