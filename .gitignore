@@ -10,6 +10,7 @@ dist/
 
 # Test output
 playwright-report/
+.playwright-mcp/
 test-results/
 
 # Editor and OS
