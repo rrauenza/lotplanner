@@ -413,12 +413,33 @@ test('corrects a vehicle, and every copy of it at once', async ({ page }) => {
 
   const scale = await pixelsPerMetre(page)
   const editor = page.getByRole('region', { name: 'The selected vehicle' })
+  const mapBefore = await page.locator('.leaflet-container').boundingBox()
 
   // The second drop left the second one selected, so the first is selected by
   // tapping it - and the form opens on what the vehicle publishes: 8 foot 6.
   await page.touchscreen.tap(first.x, first.y)
   await expect(editor.getByLabel('Width, feet')).toHaveValue('8')
   await expect(editor.getByLabel('Width, inches')).toHaveValue('6')
+
+  // Opening the form must not resize the map, or the ground moves under the
+  // finger that has just selected something.
+  const mapAfter = await page.locator('.leaflet-container').boundingBox()
+  expect(Math.abs((mapAfter?.height ?? 0) - (mapBefore?.height ?? 0))).toBeLessThan(1)
+
+  // And it has to be drawn over the photograph rather than behind it. Leaflet
+  // z-indexes its panes up to 700 and the map is not a stacking context, so a
+  // sheet left at auto paints underneath: present, filled in, and passing every
+  // other assertion in this file while being quite invisible. (Asking
+  // `elementFromPoint` does not catch it, because the panes take no pointer
+  // events and hit-testing sees straight through them.)
+  const layering = await page.evaluate(() => {
+    const sheet = document.querySelector('.sheet')
+    const panes = [...document.querySelectorAll('.leaflet-pane')]
+    const above = Math.max(...panes.map((pane) => Number(getComputedStyle(pane).zIndex) || 0))
+    return { sheet: sheet === null ? null : getComputedStyle(sheet).zIndex, panes: above }
+  })
+  expect(layering.panes).toBeGreaterThan(0)
+  expect(Number(layering.sheet)).toBeGreaterThan(layering.panes)
 
   // Correct it to 12 feet 6, which is 150 inches.
   await editor.getByLabel('Width, feet').fill('12')

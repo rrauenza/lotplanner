@@ -291,6 +291,10 @@
     padding: 0.5rem 0.75rem;
     position: absolute;
     right: 0;
+    /* Leaflet's panes carry z-indexes of their own and the map sets no stacking
+       context, so without this the sheet is drawn behind the photograph. Above
+       the panes, below the map's own controls. */
+    z-index: 800;
   }
 
   .credit {
