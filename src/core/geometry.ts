@@ -157,6 +157,20 @@ export function orientation(rotationDegrees: number): number {
   return halfTurn > 90 ? halfTurn - 180 : halfTurn
 }
 
+/**
+ * The bearing from one point on the ground to another: degrees clockwise from
+ * north, which is the convention every rotation here uses.
+ *
+ * A bearing rather than an angle in the mathematical sense, because it is the
+ * number a person would give for the direction a row runs in.
+ */
+export function bearingBetween(from: Offset, to: Offset): number {
+  const east = to.eastMetres - from.eastMetres
+  const north = to.northMetres - from.northMetres
+
+  return Math.atan2(east, north) * (180 / Math.PI)
+}
+
 /** An axis-aligned rectangle measured from a Site's origin, in ground metres. */
 export interface Extent {
   readonly centre: Offset

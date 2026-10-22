@@ -28,6 +28,18 @@ body {
   pointer-events: none;
 }
 
+/*
+ * The handle a selected vehicle is turned by. Leaflet sizes and places the
+ * element itself, from the icon size the map asked for, so this only has to say
+ * what it looks like.
+ */
+.rotation-handle {
+  background: canvas;
+  border: 2px solid #1b1b1b;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
 .placement-label {
   color: #111;
   font-size: var(--label-font-pixels, 12px);
