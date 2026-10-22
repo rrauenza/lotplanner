@@ -14,6 +14,15 @@ describe('reading a colour', () => {
     expect(() => parseColour('blue')).toThrow()
     expect(() => parseColour('#12345')).toThrow()
     expect(() => parseColour('')).toThrow()
+    expect(() => parseColour(0x1000000)).toThrow()
+    expect(() => parseColour(-1)).toThrow()
+    expect(() => parseColour(1.5)).toThrow()
+  })
+
+  it('takes a colour that is already a number, which is what an edit holds', () => {
+    expect(parseColour(0x3b82f6)).toBe(0x3b82f6)
+    expect(parseColour(0)).toBe(0)
+    expect(parseColour(0xffffff)).toBe(0xffffff)
   })
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { vehicle, type VehicleInput } from './vehicle'
+import { sameVehicle, vehicle, type VehicleInput } from './vehicle'
 
 function make(overrides: Partial<VehicleInput> = {}): ReturnType<typeof vehicle> {
   return vehicle({
@@ -50,5 +50,31 @@ describe('vehicle', () => {
   it('refuses a dimension that is not a whole positive number of inches', () => {
     expect(() => make({ widthInches: 0 })).toThrow()
     expect(() => make({ lengthInches: 199.5 })).toThrow()
+  })
+
+  it('records a width including mirrors, and refuses one narrower than the body', () => {
+    // The body is 79 inches wide, so mirrors can only add to it.
+    expect(make({ mirrorsWidthInches: 79 }).mirrorsWidthInches).toBe(79)
+    expect(() => make({ mirrorsWidthInches: 78 })).toThrow()
+    expect(() => make({ mirrorsWidthInches: 79.5 })).toThrow()
+  })
+
+  it('leaves out a width including mirrors that nobody has looked up', () => {
+    expect(make().mirrorsWidthInches).toBeUndefined()
+  })
+})
+
+describe('sameVehicle', () => {
+  it('calls two copies of one vehicle the same vehicle', () => {
+    expect(sameVehicle(make(), make())).toBe(true)
+  })
+
+  it('tells two vehicles apart when they differ in any field at all', () => {
+    expect(sameVehicle(make(), make({ name: 'Other' }))).toBe(false)
+    expect(sameVehicle(make(), make({ shortLabel: 'X' }))).toBe(false)
+    expect(sameVehicle(make(), make({ widthInches: 80 }))).toBe(false)
+    expect(sameVehicle(make(), make({ lengthInches: 200 }))).toBe(false)
+    expect(sameVehicle(make(), make({ colour: '#000000' }))).toBe(false)
+    expect(sameVehicle(make(), make({ mirrorsWidthInches: 102 }))).toBe(false)
   })
 })

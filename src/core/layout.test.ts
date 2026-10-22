@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { offsetFromLatLng } from './geometry'
-import { newLayout, rectangleOf, withMovedPlacement, withPlacement, type Placement } from './layout'
+import {
+  newLayout,
+  rectangleOf,
+  withEditedVehicle,
+  withMovedPlacement,
+  withPlacement,
+  type Placement,
+} from './layout'
 import type { Site } from './site'
 import { vehicle } from './vehicle'
 
@@ -32,6 +39,10 @@ function at(id: string, centre = { eastMetres: 0, northMetres: 0 }): Placement {
 
 function centreOf(layout: { readonly placements: readonly Placement[] }, id: string) {
   return layout.placements.find((each) => each.id === id)?.centre
+}
+
+function vehicleOf(layout: { readonly placements: readonly Placement[] }, id: string) {
+  return layout.placements.find((each) => each.id === id)?.vehicle
 }
 
 describe('a Layout', () => {
@@ -100,5 +111,51 @@ describe('changing a Layout', () => {
     const moved = withMovedPlacement(start, 'nobody', { eastMetres: 1, northMetres: 1 })
 
     expect(moved.placements[0]).toBe(start.placements[0])
+  })
+})
+
+describe('editing a vehicle that is in a Layout', () => {
+  const COACH = vehicle({
+    name: 'Coach (45 ft, MCI J4500)',
+    shortLabel: 'Coach',
+    widthInches: 102,
+    lengthInches: 547,
+    colour: '#22c55e',
+  })
+
+  const withThree = withPlacement(
+    withPlacement(withPlacement(newLayout(SITE), at('one')), at('two')),
+    { id: 'three', vehicle: COACH, centre: { eastMetres: 0, northMetres: 0 }, rotationDegrees: 90 },
+  )
+
+  it('changes every Placement of that vehicle at once, and no other', () => {
+    // The Explorer's width is corrected from 79 inches to 84.
+    const edited = withEditedVehicle(withThree, SUV, vehicle({ ...SUV, widthInches: 84 }))
+
+    expect(vehicleOf(edited, 'one')?.widthInches).toBe(84)
+    expect(vehicleOf(edited, 'two')?.widthInches).toBe(84)
+    expect(vehicleOf(edited, 'three')?.name).toBe(COACH.name)
+  })
+
+  it('leaves the state the edit was made from exactly as it was', () => {
+    const edited = withEditedVehicle(withThree, SUV, vehicle({ ...SUV, widthInches: 84 }))
+
+    expect(vehicleOf(edited, 'one')?.widthInches).toBe(84)
+    expect(vehicleOf(withThree, 'one')?.widthInches).toBe(79)
+  })
+
+  it('carries a rename through, and leaves the short label to be its own answer', () => {
+    const start = withPlacement(newLayout(SITE), at('one'))
+    const edited = withEditedVehicle(start, SUV, vehicle({ ...SUV, name: 'Explorer' }))
+
+    expect(vehicleOf(edited, 'one')?.name).toBe('Explorer')
+    // The label was given rather than derived, so renaming does not rewrite it.
+    expect(vehicleOf(edited, 'one')?.shortLabel).toBe('SUV')
+  })
+
+  it('changes nothing when the Layout has no such vehicle on it', () => {
+    const edited = withEditedVehicle(withThree, vehicle({ ...SUV, name: 'Never placed' }), SUV)
+
+    expect(edited.placements).toEqual(withThree.placements)
   })
 })

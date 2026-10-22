@@ -14,8 +14,18 @@
 const SHORT_HEX = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i
 const SIX_DIGIT_HEX = /^(?:#|0x)([0-9a-f]{6})$/i
 
-/** A 24-bit integer, from any of the three shapes a colour is written in. */
-export function parseColour(raw: string): number {
+/** A 24-bit integer, from any of the shapes a colour is written in. */
+export function parseColour(raw: string | number): number {
+  if (typeof raw === 'number') {
+    // Already a colour. This is the shape an edit round-trips through, and it
+    // still has to be a colour: a 25th bit is a mistake rather than a colour.
+    if (!Number.isInteger(raw) || raw < 0 || raw > 0xffffff) {
+      throw new Error(`${String(raw)} is not a colour.`)
+    }
+
+    return raw
+  }
+
   const text = raw.trim().toLowerCase()
 
   const short = SHORT_HEX.exec(text)
@@ -35,7 +45,7 @@ export function parseColour(raw: string): number {
     return Number.parseInt(long[1] ?? '', 16)
   }
 
-  throw new Error(`A colour is #rgb, #rrggbb or 0xRRGGBB, not ${raw}.`)
+  throw new Error(`A colour is #rgb, #rrggbb, 0xRRGGBB or a whole number, not ${raw}.`)
 }
 
 /** That integer as a browser understands it, which is how a vehicle is drawn. */

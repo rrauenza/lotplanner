@@ -8,7 +8,7 @@ import {
 } from './geometry'
 import { extentForSite, type Site } from './site'
 import { inchesToMetres } from './units'
-import type { Vehicle } from './vehicle'
+import { sameVehicle, type Vehicle } from './vehicle'
 
 /**
  * A Layout: a Site, the frame it was worked in, and the vehicles placed on it.
@@ -82,6 +82,28 @@ export function rectangleOf(placement: Placement): OrientedRectangle {
 /** The same Layout with one more vehicle on it. */
 export function withPlacement(layout: Layout, placement: Placement): Layout {
   return { ...layout, placements: [...layout.placements, placement] }
+}
+
+/**
+ * The same Layout with every Placement of one vehicle edited at once.
+ *
+ * Editing a vehicle is deliberately not an edit to one Placement. The same
+ * vehicle placed four times is four arrangements of one size, and the point of
+ * correcting that size is that all four are corrected - which is why this looks
+ * for the vehicle it was given rather than for the placement it came from.
+ *
+ * The vehicle to look for is named by value rather than by where it came from,
+ * because a Layout carries copies: two placements of one vehicle are two copies,
+ * and after a Layout has been written out and read back they are not even the
+ * same object.
+ */
+export function withEditedVehicle(layout: Layout, before: Vehicle, after: Vehicle): Layout {
+  return {
+    ...layout,
+    placements: layout.placements.map((placement) =>
+      sameVehicle(placement.vehicle, before) ? { ...placement, vehicle: after } : placement,
+    ),
+  }
 }
 
 /**
