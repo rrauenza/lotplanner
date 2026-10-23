@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   alongAndAcross,
+  alongAndAcrossOf,
   boundsForExtent,
   containsPoint,
   cornersOf,
@@ -198,6 +199,47 @@ describe('alongAndAcross', () => {
 
     expect(right.eastMetres).toBeCloseTo(5, 6)
     expect(right.northMetres).toBeCloseTo(0, 6)
+  })
+})
+
+describe('alongAndAcrossOf', () => {
+  it('reads a point back into the axes alongAndAcross placed it by', () => {
+    const rectangle = {
+      centre: { eastMetres: 3, northMetres: -7 },
+      lengthMetres: 20,
+      widthMetres: 10,
+      rotationDegrees: 30,
+    }
+    const onTheGround = alongAndAcross(rectangle, 7, -4)
+    const back = alongAndAcrossOf(rectangle, onTheGround)
+
+    expect(back.alongMetres).toBeCloseTo(7, 9)
+    expect(back.acrossMetres).toBeCloseTo(-4, 9)
+  })
+
+  it('turns with the rectangle rather than reading the compass', () => {
+    // Nine metres north is nine metres along a rectangle lying north-south, and
+    // nine metres across one lying east-west.
+    const upright = {
+      centre: { eastMetres: 0, northMetres: 0 },
+      lengthMetres: 20,
+      widthMetres: 10,
+      rotationDegrees: 0,
+    }
+    const onItsSide = { ...upright, rotationDegrees: 90 }
+
+    expect(alongAndAcrossOf(upright, { eastMetres: 0, northMetres: 9 }).alongMetres).toBeCloseTo(
+      9,
+      9,
+    )
+    expect(alongAndAcrossOf(onItsSide, { eastMetres: 0, northMetres: 9 }).alongMetres).toBeCloseTo(
+      0,
+      9,
+    )
+    expect(alongAndAcrossOf(onItsSide, { eastMetres: 0, northMetres: 9 }).acrossMetres).toBeCloseTo(
+      -9,
+      9,
+    )
   })
 })
 

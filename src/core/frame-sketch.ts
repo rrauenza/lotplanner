@@ -1,4 +1,4 @@
-import { axesOf, type Offset, type SiteFrame } from './geometry'
+import { alongAndAcrossOf, type Offset, type SiteFrame } from './geometry'
 import { MAX_IMAGE_PIXELS, NATIVE_METRES_PER_PIXEL } from './imagery'
 import { CONTEXT_MARGIN_METRES } from './site'
 
@@ -89,11 +89,10 @@ export function frameFromCorners(from: Offset, to: Offset): SiteFrame | undefine
  * side too small to be a space is refused so the last good rectangle stands.
  */
 export function resizedFrame(frame: SiteFrame, held: Offset, moved: Offset): SiteFrame | undefined {
-  const [along, across] = axesOf(frame)
-  const east = moved.eastMetres - held.eastMetres
-  const north = moved.northMetres - held.northMetres
-  const lengthMetres = Math.abs(east * along.eastMetres + north * along.northMetres)
-  const widthMetres = Math.abs(east * across.eastMetres + north * across.northMetres)
+  const corner = alongAndAcrossOf(frame, held)
+  const dragged = alongAndAcrossOf(frame, moved)
+  const lengthMetres = Math.abs(dragged.alongMetres - corner.alongMetres)
+  const widthMetres = Math.abs(dragged.acrossMetres - corner.acrossMetres)
 
   if (lengthMetres < MINIMUM_FRAME_SIDE_METRES || widthMetres < MINIMUM_FRAME_SIDE_METRES) {
     return undefined

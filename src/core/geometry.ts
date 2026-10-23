@@ -195,11 +195,11 @@ export interface LatLngBounds {
  * second copy of the sine and cosine would be a second opinion about which way a
  * rectangle faces.
  *
- * Exported because the creator mode asks the same question of a frame it is
- * reshaping: a corner dragged with the rectangle held at its own angle needs the
- * two directions to measure the drag along, and those are these two.
+ * Kept private so that nothing outside can hold its own pair and drift from
+ * these: anything that needs to read a point through a rectangle's axes asks
+ * `alongAndAcrossOf` below, which is the one inverse of this basis there is.
  */
-export function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
+function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
   const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
 
   return [
@@ -232,6 +232,29 @@ export function alongAndAcross(
 }
 
 /**
+ * A point read through a rectangle's own axes: how far along its length and
+ * across its width it lies, measured from the rectangle's centre.
+ *
+ * The one inverse of the basis above, so anything that asks where a point sits
+ * relative to a rectangle - whether a finger is inside one, or how far a corner
+ * was dragged along its sides - gets the same answer. A second copy of the two
+ * dot products would be a second opinion about which way the rectangle faces.
+ */
+export function alongAndAcrossOf(
+  rectangle: OrientedRectangle,
+  point: Offset,
+): { readonly alongMetres: number; readonly acrossMetres: number } {
+  const [along, across] = axesOf(rectangle)
+  const east = point.eastMetres - rectangle.centre.eastMetres
+  const north = point.northMetres - rectangle.centre.northMetres
+
+  return {
+    alongMetres: east * along.eastMetres + north * along.northMetres,
+    acrossMetres: east * across.eastMetres + north * across.northMetres,
+  }
+}
+
+/**
  * The four corners of an oriented rectangle, as ground metres from the Site's
  * origin, in order around the perimeter.
  *
@@ -258,7 +281,7 @@ export function cornersOf(rectangle: OrientedRectangle): Offset[] {
  * Whether a point on the ground lies inside an oriented rectangle, optionally
  * with the rectangle grown by a padding first.
  *
- * The point is turned back through the rectangle's own axes (`axesOf`), then
+ * The point is read through the rectangle's own axes (`alongAndAcrossOf`), then
  * compared against the two half-extents: the same basis the rectangle is drawn
  * from, read backwards, rather than a second opinion about where its edges are.
  * A hit test that disagrees with the drawing is a bug nobody sees until they try
@@ -272,12 +295,7 @@ export function containsPoint(
   point: Offset,
   paddingMetres = 0,
 ): boolean {
-  const [along, across] = axesOf(rectangle)
-  const east = point.eastMetres - rectangle.centre.eastMetres
-  const north = point.northMetres - rectangle.centre.northMetres
-
-  const alongMetres = east * along.eastMetres + north * along.northMetres
-  const acrossMetres = east * across.eastMetres + north * across.northMetres
+  const { alongMetres, acrossMetres } = alongAndAcrossOf(rectangle, point)
 
   return (
     Math.abs(alongMetres) <= rectangle.lengthMetres / 2 + paddingMetres &&
