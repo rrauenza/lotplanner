@@ -175,6 +175,18 @@ describe('a Layout on the wire', () => {
     expect(vehicles[7]).toHaveLength(2)
   })
 
+  it('dedupes by value, not by object, when a Layout has been through storage', () => {
+    // The shape real data arrives in: storage rebuilds a Vehicle per Placement
+    // (ADR 0002), so the two Semi placements are equal values and not the same
+    // object. Identity would list the same vehicle twice and inflate the link.
+    const roundTripped = JSON.parse(JSON.stringify(gridLayout())) as Layout
+    const vehicles = JSON.parse(
+      encodeArtifact({ kind: 'layout', layout: roundTripped }),
+    ) as unknown[]
+
+    expect(vehicles[7]).toHaveLength(2)
+  })
+
   it('re-encodes to the very same text, so a reader cannot drift from a writer', () => {
     const layout = gridLayout()
     const once = encodeArtifact({ kind: 'layout', layout })

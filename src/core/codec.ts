@@ -1,6 +1,6 @@
 import type { LatLng, LatLngBounds, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
-import { vehicle, type Vehicle } from './vehicle'
+import { sameVehicle, vehicle, type Vehicle } from './vehicle'
 import type { ArrivedCollection } from './vehicle-collection'
 
 /**
@@ -174,15 +174,17 @@ export function decodeArtifactFields(parsed: readonly unknown[], reading: Readin
 
 function layoutFields(layout: Layout): readonly unknown[] {
   const vehicles: Vehicle[] = []
-  const indexOf = new Map<Vehicle, number>()
 
   const placements = layout.placements.map((placement) => {
-    let index = indexOf.get(placement.vehicle)
+    // By value, not by identity (ADR 0002): a Layout that has been through
+    // storage holds a distinct Vehicle object per Placement even when every one
+    // of them is the same vehicle, so a table keyed on the object would list one
+    // entry per Placement and inflate the link against its budget.
+    let index = vehicles.findIndex((each) => sameVehicle(each, placement.vehicle))
 
-    if (index === undefined) {
+    if (index === -1) {
       index = vehicles.length
       vehicles.push(placement.vehicle)
-      indexOf.set(placement.vehicle, index)
     }
 
     return [
