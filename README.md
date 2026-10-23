@@ -16,6 +16,13 @@ for turning it, which settles onto the angles of the space and of the vehicles a
 buttons to duplicate it or delete it. Undo and redo work over every one of those edits, by button or
 by keyboard.
 
+Vehicles come in collections, and the palette shows one at a time. The four the app ships with are
+always there, in a collection that cannot be renamed, filled or deleted, so the palette is never
+empty. Collections of your own are yours to make, name, fill with your actual fleet, correct a
+vehicle in, remove one from, and throw away; they belong to the browser rather than to a place, so
+they come with you from one site to the next. A collection that was received from somebody else says
+whose it was, and importing one always makes a new collection rather than touching an existing one.
+
 Under the photograph, a live count says how many of each vehicle are on the ground and warns when two
 of them overlap; the overlapping pair are outlined on the picture as well. Opacity is one control for
 all of them, so an overlap can be read through.

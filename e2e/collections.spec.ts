@@ -207,6 +207,48 @@ test('will not let a collection take the System Collection name, and says why', 
   await expect(sheet(page).getByRole('alert')).toHaveCount(0)
 })
 
+test('shows where a received collection came from, and tracks nobody', async ({ page }) => {
+  // A collection that arrived from somewhere else, as storage holds it: a name,
+  // its vehicles, and the name of the collection it came from. There is no
+  // account behind any of it, and nothing else about the sender is stored.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'lotplanner:collections',
+      JSON.stringify([
+        {
+          id: 'received',
+          name: 'Fleet A (2)',
+          source: 'Fleet A',
+          vehicles: [
+            {
+              name: 'Tow truck',
+              shortLabel: 'Tow truck',
+              widthInches: 96,
+              lengthInches: 240,
+              colour: 0x6b7280,
+            },
+          ],
+        },
+      ]),
+    )
+  })
+
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await palette(page).getByRole('button', { name: 'Fleet A (2)' }).click()
+
+  // Descriptive provenance, shown plainly, so the visitor can tell their own
+  // work from somebody else's.
+  await expect(palette(page)).toContainText('Received from Fleet A')
+  await dragFromPalette(page, /Tow truck/, await middleOfTheMap(page))
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  await page.getByRole('button', { name: 'Collections' }).click()
+  await expect(sheet(page)).toContainText('Received from Fleet A')
+})
+
 test('writes a collection before the page goes, rather than losing it', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)
