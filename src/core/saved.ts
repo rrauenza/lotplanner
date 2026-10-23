@@ -1,7 +1,7 @@
 import type { LatLng, LatLngBounds, Offset, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
 import { tidy } from './text'
-import { vehicle, type Vehicle } from './vehicle'
+import { readVehicle } from './vehicle'
 
 /**
  * Work kept between visits.
@@ -261,6 +261,9 @@ function readPlacement(value: unknown): Placement | undefined {
     return undefined
   }
 
+  // A Vehicle read out of a record is subject to the Vehicle's own rules, so a
+  // value that is not a rectangle this app could have drawn - a zero width, no
+  // name - takes the whole Placement with it.
   const vehicle = readVehicle(moving)
   const centre = readOffset(at)
 
@@ -269,40 +272,6 @@ function readPlacement(value: unknown): Placement | undefined {
   }
 
   return { id, vehicle, centre, rotationDegrees }
-}
-
-/**
- * A Vehicle as the domain makes one, out of fields that are at least the right
- * primitive types.
- *
- * The rules about what a Vehicle may be - a name, a cap, a colour, dimensions
- * that are whole inches - are not repeated here. They belong to the Vehicle, and
- * the constructor is the only authority on them, so a record that holds
- * something which is not a vehicle is dropped here for the same reason it could
- * never have been created in the first place.
- */
-function readVehicle(value: unknown): Vehicle | undefined {
-  if (!isRecord(value)) {
-    return undefined
-  }
-
-  const { name, shortLabel, widthInches, lengthInches, colour } = value
-
-  if (
-    typeof name !== 'string' ||
-    typeof shortLabel !== 'string' ||
-    !isNumber(widthInches) ||
-    !isNumber(lengthInches) ||
-    (typeof colour !== 'string' && !isNumber(colour))
-  ) {
-    return undefined
-  }
-
-  try {
-    return vehicle({ name, shortLabel, widthInches, lengthInches, colour })
-  } catch {
-    return undefined
-  }
 }
 
 function readOffset(value: unknown): Offset | undefined {
