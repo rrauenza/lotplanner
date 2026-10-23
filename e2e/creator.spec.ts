@@ -59,9 +59,11 @@ test('adds a place: find it, confirm it, draw it, turn it, emit it', async ({ pa
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
   await expect(page.getByText(ATTRIBUTION)).toBeVisible()
 
-  // Exactly one picture, fetched once for the whole session, and it is not
-  // refetched while the rectangle is adjusted below.
+  // Exactly one picture, fetched once for the whole session, sized to the
+  // service's pixel cap at its own resolution, and not refetched while the
+  // rectangle is adjusted below.
   expect(pictures).toHaveLength(1)
+  expect(pictures[0]).toContain('size=4000,4000')
 
   // Draw the rectangle over the space.
   const map = await page.locator('.leaflet-container').boundingBox()
