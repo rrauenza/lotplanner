@@ -1,6 +1,14 @@
 import { expect, test, type Page } from '@playwright/test'
 
-import { dragFromPalette, middleOfTheMap, openTheSite, serveImagery } from './harness.js'
+import {
+  dragFromPalette,
+  drawnSize,
+  middleOfTheMap,
+  openTheSite,
+  serveImagery,
+  touchDrag,
+  touchHoldDrag,
+} from './harness.js'
 
 /**
  * Working on a phone: the layout, the padded targets, the long press and the
@@ -87,4 +95,117 @@ test('fits the map and its controls on a short phone without overlapping', async
   const undo = await page.getByRole('button', { name: 'Undo' }).boundingBox()
   expect(undo).not.toBeNull()
   expect((undo?.y ?? 0) + (undo?.height ?? 0)).toBeLessThanOrEqual(viewport.height)
+})
+
+/**
+ * Somewhere on the map with nothing on it: the top right corner, away from
+ * Leaflet's own zoom control in the top left, and away from the sheet a
+ * selection opens along the bottom.
+ */
+async function emptyCorner(page: Page): Promise<{ x: number; y: number }> {
+  const map = await mapBox(page)
+
+  return { x: map.x + map.width - 16, y: map.y + 16 }
+}
+
+/** A car dropped in the upper part of the map, where the sheet does not cover it. */
+async function placeACar(page: Page): Promise<{ x: number; y: number }> {
+  const map = await mapBox(page)
+  const at = { x: middleOf(map).x, y: map.y + 70 }
+
+  await dragFromPalette(page, /SUV/, at)
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  return at
+}
+
+test('takes a press outside a small car, because a fingertip is not a rectangle', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await placeACar(page)
+  // The drop leaves it selected, so let it go before the ground is tested.
+  const away = await emptyCorner(page)
+  await page.touchscreen.tap(away.x, away.y)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+
+  const drawn = await drawnSize(page, 'path.placement')
+  const car = await boxOf(page, 'path.placement')
+  const middle = middleOf(car)
+
+  // A car is less than half a fingertip across. A press a little above its
+  // outline still lands on it - the target is padded, and the pad is not drawn.
+  await page.touchscreen.tap(middle.x, car.y - 12)
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+  expect(await drawnSize(page, 'path.placement')).toEqual(drawn)
+
+  // The pad has an edge of its own: a press well clear of the car finds the
+  // empty ground and lets the selection go, rather than the target growing
+  // without limit.
+  await page.touchscreen.tap(away.x, away.y)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+  await page.touchscreen.tap(middle.x, car.y - 60)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+
+  // And it is a screen distance rather than a ground one, which is the point:
+  // zoomed out, a car is a couple of pixels, and the target is still a fingertip.
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  // A zoom animates, and a tap aimed at coordinates taken mid-animation is
+  // aimed at where the car was rather than where it is.
+  await page.waitForTimeout(400)
+
+  const smaller = await boxOf(page, 'path.placement')
+  expect(smaller.width).toBeLessThan(car.width)
+  await page.touchscreen.tap(middleOf(smaller).x, smaller.y - 10)
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+})
+
+test('picks a small vehicle up with a long press, and lets a jittery tap alone', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await placeACar(page)
+  const away = await emptyCorner(page)
+  await page.touchscreen.tap(away.x, away.y)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+
+  const before = await boxOf(page, 'path.placement')
+  const middle = middleOf(before)
+
+  // A tap that jitters over the car is still a tap: it selects, and it does not
+  // nudge what it touched. A car is under 7 px across here, so arming the move
+  // on the first pixel of travel would move it every time someone selected it.
+  await touchDrag(page, middle, { x: middle.x + 6, y: middle.y }, 3)
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+  const nudged = await boxOf(page, 'path.placement')
+  expect(Math.abs(nudged.x - before.x)).toBeLessThan(2)
+  expect(Math.abs(nudged.y - before.y)).toBeLessThan(2)
+
+  // A long press picks it up: the move is armed without the finger travelling,
+  // which is what makes a small or an overlapping target reliable to grab. The
+  // same 6 px of travel now moves the car.
+  await page.touchscreen.tap(away.x, away.y)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+
+  await touchHoldDrag(
+    page,
+    middle,
+    { x: middle.x + 6, y: middle.y },
+    600,
+    3,
+    async () => {
+      await expect(page.locator('path.placement.picked-up')).toHaveCount(1)
+    },
+  )
+
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+  const carried = await boxOf(page, 'path.placement')
+  expect(Math.abs(carried.x - before.x)).toBeGreaterThan(4)
 })
