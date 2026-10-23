@@ -113,7 +113,8 @@
   let openId = $state<string | undefined>(undefined)
 
   /**
-   * Whether the Site on screen was opened from a shared link rather than chosen.
+   * Whether the Site on screen arrived - from a shared link or an imported file -
+   * rather than being chosen from the manifest.
    *
    * Choosing that same place again is then a request to see one's own saved work
    * for it, which the guard in `choose` would otherwise mistake for a repeat.

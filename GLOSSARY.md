@@ -63,3 +63,7 @@ _Avoid_: payload, blob, record, document
 **Shared link**:
 A URL whose fragment carries an Artifact, so it opens for anyone with no account and nothing installed. What it opens is a copy: nothing of the recipient's is read into it or written over.
 _Avoid_: share URL, deep link
+
+**File**:
+An Artifact written out as legible JSON, so work too large for a link can be kept or sent outside one. An imported Layout is added to the Site's saved work; an imported Collection is always a new one.
+_Avoid_: document, project, backup
