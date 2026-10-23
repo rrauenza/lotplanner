@@ -77,6 +77,11 @@ export function siteIdFor(name: string): string {
  * their Layouts, which is exactly the sort of quiet mixing-up the id exists to
  * prevent. A Site being corrected keeps its own id and so cannot collide with
  * itself.
+ *
+ * The place's address is read by no one here. A manifest entry has no field for
+ * one - it is only ever how the search list told two candidates apart - so the
+ * entry a creator commits carries the place's name and its position and no
+ * more.
  */
 export function manifestEntry(draft: SiteDraft, taken: readonly Site[]): Site {
   const name = siteName(draft.place.name)
