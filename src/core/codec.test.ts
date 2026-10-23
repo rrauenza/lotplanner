@@ -7,7 +7,7 @@ import {
   decodeArtifact,
   encodeArtifact,
   type Artifact,
-  type TravellingCollection,
+  type ArrivedCollection,
 } from './codec'
 import { newLayout, type Layout, type Placement } from './layout'
 
@@ -189,7 +189,7 @@ describe('a Layout on the wire', () => {
 })
 
 describe('a Collection on the wire', () => {
-  const collection: TravellingCollection = { name: 'Yard dump trucks', vehicles: [SEMI, EXPLORER] }
+  const collection: ArrivedCollection = { name: 'Yard dump trucks', vehicles: [SEMI, EXPLORER] }
 
   it('round-trips with no Layout involved, because both travel the same way', () => {
     const read = decodeArtifact(encodeArtifact({ kind: 'collection', collection }))

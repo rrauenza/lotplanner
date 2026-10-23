@@ -1,6 +1,7 @@
 import type { LatLng, LatLngBounds, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
 import { vehicle, type Vehicle } from './vehicle'
+import type { ArrivedCollection } from './vehicle-collection'
 
 /**
  * The codec: how a Layout or a Collection is spelled when it leaves this app.
@@ -30,19 +31,16 @@ export const CODEC_VERSION = 1
 
 /**
  * A Vehicle Collection as it travels: its name and the vehicles in it, and
- * nothing local to the browser it came from. Ticket #14 gives this its file and
- * its home in the interface; the wire shape lives here already because a
- * Collection and a Layout must never drift apart about how a vehicle is spelled.
+ * nothing local to the browser it came from. `ArrivedCollection` is the same
+ * shape the Collection core reads an import into (issue #11), so a Collection
+ * arriving by link and one arriving by file are one thing.
  */
-export interface TravellingCollection {
-  readonly name: string
-  readonly vehicles: readonly Vehicle[]
-}
+export type { ArrivedCollection }
 
 /** What can be written out and read back whole. */
 export type Artifact =
   | { readonly kind: 'layout'; readonly layout: Layout }
-  | { readonly kind: 'collection'; readonly collection: TravellingCollection }
+  | { readonly kind: 'collection'; readonly collection: ArrivedCollection }
 
 /**
  * What reading gave back.
@@ -190,7 +188,7 @@ function layoutFields(layout: Layout): readonly unknown[] {
   ]
 }
 
-function collectionFields(collection: TravellingCollection): readonly unknown[] {
+function collectionFields(collection: ArrivedCollection): readonly unknown[] {
   return ['collection', CODEC_VERSION, collection.name, collection.vehicles.map(vehicleFields)]
 }
 
@@ -252,7 +250,7 @@ function readLayout(fields: readonly unknown[], newId: () => string): Layout | u
   return frame === undefined ? undefined : { ...layout, frame }
 }
 
-function readCollection(fields: readonly unknown[]): TravellingCollection | undefined {
+function readCollection(fields: readonly unknown[]): ArrivedCollection | undefined {
   const name = asString(fields[0])
   const vehicles = readVehicles(fields[1])
 
