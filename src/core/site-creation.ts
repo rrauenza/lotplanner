@@ -100,10 +100,12 @@ export function manifestEntry(draft: SiteDraft, taken: readonly Site[]): Site {
 /**
  * The entry as it is pasted into the manifest.
  *
- * JSON in shape and key order, written in the manifest's own spelling: single
- * quotes, two spaces to a level, one key to a line, and a trailing comma so the
- * entry can go anywhere in the list. A pasted entry then reads as the ones
- * around it do, and committing one is a diff of one entry.
+ * A TypeScript object literal in the manifest's own spelling - unquoted keys,
+ * single quotes, two spaces to a level, one key to a line, and a trailing comma
+ * so the entry can go anywhere in the list - rather than strict JSON, because it
+ * is copied straight into `src/manifest.ts` and committed (ADR 0006). A pasted
+ * entry then reads as the ones around it do, and committing one is a diff of one
+ * entry.
  */
 export function manifestEntryText(entry: Site): string {
   const lines = [

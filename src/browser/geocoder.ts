@@ -5,9 +5,9 @@ import type { GeocodingEffects } from '../core/geocoding'
  *
  * OpenStreetMap's Nominatim, which is keyless and answers the shape the core
  * reads: a list of records with a position, a display name and often a short
- * name. It is the app's only third-party runtime dependency, and the module is
- * only ever loaded by the creator's own chunk, so a visitor neither reaches it
- * nor downloads it.
+ * name. It is the only service the app reaches that is not USGS's, and the
+ * module is only ever loaded by the creator's own chunk, so a visitor neither
+ * reaches it nor downloads it.
  *
  * The usage policy is met without a key or a made-up identity. Identification:
  * a cross-origin request carries the page's `Referer` under the browser's
