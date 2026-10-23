@@ -46,6 +46,12 @@ as you make for it: compare two options, come back to either, rename them, throw
 returns you to the one you were last working on. If the browser will not keep anything — private
 browsing, a full quota — the app says so and carries on in memory rather than refusing to start.
 
+Work too large for a link is exported to a file and imported back. A file is legible JSON — open it and
+read it — carrying the same version field a link does, so an old file keeps opening and a file from a
+newer app is refused politely rather than misread. Importing a Layout adds it to that place's saved
+work, beside whatever is already there; importing a Collection always makes a new one, never
+overwriting yours.
+
 - The domain vocabulary is in [`GLOSSARY.md`](./GLOSSARY.md).
 - The decisions and their reasons are in [`docs/adr/`](./docs/adr/).
 - The spec is [issue #1](https://github.com/rrauenza/lotplanner/issues/1), and the work is broken

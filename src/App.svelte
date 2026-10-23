@@ -3,6 +3,7 @@
   import { followAttribution } from './browser/attribution'
   import { collectionEffects } from './browser/collections-store'
   import { browserCompressor } from './browser/compression'
+  import { downloadFile, readFile } from './browser/files'
   import { imageryEffects } from './browser/imagery-store'
   import { savedEffects } from './browser/saved-store'
   import { offerLink } from './browser/share'
@@ -15,9 +16,11 @@
   import Placed from './components/Placed.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
-  import { type Arrival } from './core/arrival'
+  import { type Arrival, importedFrom } from './core/arrival'
   import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
+  import type { ArrivedCollection } from './core/codec'
   import type { Offset } from './core/geometry'
+  import { encodeFile, fileNameFor } from './core/file'
   import { encodePayload } from './core/link'
   import { linkFor } from './core/route'
   import {
@@ -48,6 +51,7 @@
     nextName,
     withSaved,
     withRenamed,
+    withImported,
     savedWith,
     withoutSaved,
     type SavedLayout,
@@ -61,6 +65,7 @@
     loadCollections,
     missingFrom,
     nextCollectionName,
+    received,
     withCreated,
     withEditedVehicle as withEditedVehicleInCollection,
     withRenamed as withRenamedCollection,
@@ -111,7 +116,8 @@
   let openId = $state<string | undefined>(undefined)
 
   /**
-   * Whether the Site on screen was opened from a shared link rather than chosen.
+   * Whether the Site on screen arrived - from a shared link or an imported file -
+   * rather than being chosen from the manifest.
    *
    * Choosing that same place again is then a request to see one's own saved work
    * for it, which the guard in `choose` would otherwise mistake for a repeat.
@@ -123,6 +129,15 @@
 
   /** What became of a share: handed to the system, copied, or neither. */
   let sharing = $state('')
+
+  /**
+   * What became of an import, or what went wrong with one, in plain words.
+   *
+   * Kept after the work is done rather than only while it happens: an import
+   * that silently did nothing is the one outcome worth ruling out, so the answer
+   * stays on screen whether it was success or a refusal.
+   */
+  let importNotice = $state('')
 
   /** Whether what is on screen will survive the session, and what to say if not. */
   let saving = $state<Saving>(KEPT)
@@ -214,6 +229,16 @@
   // Raw, so that putting a component instance into state does not wrap it in a
   // proxy, which a Leaflet-backed component would not enjoy.
   let mapView = $state.raw<MapHandle | undefined>(undefined)
+
+  /**
+   * The hidden file input behind the Import button.
+   *
+   * An `<input type="file">` is the only way a page may ask for a file, and it
+   * cannot be opened except by a click the visitor made, so the visible button
+   * clicks this one. It is in the header rather than beside Share because a file
+   * may bring its own Site, and so has to be importable before any is open.
+   */
+  let importInput = $state<HTMLInputElement | undefined>(undefined)
 
   /** Everything about the chosen Site that arithmetic alone decides. */
   const plan = $derived(
@@ -465,22 +490,28 @@
   }
 
   /**
-   * Open a Layout that arrived in a link.
+   * The Site a Layout carries, so a shared or imported Layout opens even when
+   * the manifest has never heard of the place (ADR 0002, ADR 0009).
+   */
+  function siteFromLayout(layout: Layout): Site {
+    const place: Site = { id: layout.siteId, name: layout.siteName, origin: layout.origin }
+
+    return layout.frame === undefined ? place : { ...place, frame: layout.frame }
+  }
+
+  /**
+   * Put a Layout on screen, and read the Site's own work so a later edit joins it.
    *
    * The Site is rebuilt from what the Layout carries - its name, its
-   * georeference and its frame - so a link opens without the manifest having
-   * heard of the place, and without an account or an install (ADR 0002, ADR
-   * 0009).
+   * georeference and its frame - so it opens without the manifest having heard
+   * of the place, and without an account or an install.
    *
-   * What it does to the recipient's own work is nothing: their saved Layouts for
-   * this Site are read, so a later edit joins them rather than replacing the
-   * record, but nothing is written and nothing is removed. The shared
-   * arrangement is shown beside their work, unnamed and unsaved, until they edit
-   * it - and then it becomes theirs, not the sender's.
+   * The work that was read comes back, so a caller that is about to add to it -
+   * an import - carries on from the list that was just put on screen rather than
+   * reading storage twice.
    */
-  async function openShared(shared: Layout): Promise<void> {
-    const place: Site = { id: shared.siteId, name: shared.siteName, origin: shared.origin }
-    const arrived: Site = shared.frame === undefined ? place : { ...place, frame: shared.frame }
+  async function showLayout(shared: Layout): Promise<readonly SavedLayout[]> {
+    const arrived = siteFromLayout(shared)
 
     site = arrived
     openedFromALink = true
@@ -490,7 +521,7 @@
     // The place may have been chosen while storage was being asked; by id rather
     // than identity, since `$state` hands back a proxy.
     if (site.id !== arrived.id) {
-      return
+      return []
     }
 
     savedLayouts = loaded.saved
@@ -500,6 +531,138 @@
     openId = undefined
     selectedId = undefined
     editor = startEditing(shared)
+
+    return loaded.saved
+  }
+
+  /**
+   * Open a Layout that arrived in a link.
+   *
+   * What it does to the recipient's own work is nothing: their saved Layouts for
+   * this Site are read, so a later edit joins them rather than replacing the
+   * record, but nothing is written and nothing is removed. The shared
+   * arrangement is shown beside their work, unnamed and unsaved, until they edit
+   * it - and then it becomes theirs, not the sender's.
+   */
+  async function openShared(shared: Layout): Promise<void> {
+    await showLayout(shared)
+  }
+
+  /**
+   * Import a Layout from a file: show it, and keep it as a named Layout here.
+   *
+   * Unlike a link, a file is kept - the visitor asked for it - so this is
+   * `showLayout` plus one named entry. It is added and never replaces: the id is
+   * this session's own, and `withImported` only appends, so work already on the
+   * Site survives an import byte for byte.
+   */
+  async function importLayout(layout: Layout, wanted: string | undefined): Promise<void> {
+    const arrived = siteFromLayout(layout)
+    const alreadyOpen = site?.id === arrived.id
+
+    // Anything waiting to be written for the place being left goes now, so
+    // arriving somewhere else cannot lose it.
+    if (!alreadyOpen && waiting !== undefined) {
+      await write()
+    }
+
+    site = arrived
+    openedFromALink = true
+    selectedId = undefined
+
+    // The Site already open has newer work in memory than storage does, so
+    // reading storage again would drop an edit made a moment ago.
+    const loaded = alreadyOpen
+      ? { saved: savedLayouts, saving }
+      : await loadSaved(arrived.id, savedEffects)
+
+    // Chosen again while storage was being asked; by id, since `$state` hands
+    // back a proxy.
+    if (site.id !== arrived.id) {
+      return
+    }
+
+    const id = crypto.randomUUID()
+
+    savedLayouts = withImported(loaded.saved, layout, wanted, id)
+    saving = loaded.saving
+    openId = id
+    editor = startEditing(layout)
+    importNotice = `Imported "${savedWith(savedLayouts, id)?.name ?? 'a Layout'}" into ${layout.siteName}.`
+    writeWhenSettled()
+  }
+
+  /**
+   * Keep a Collection that arrived in a file.
+   *
+   * Through the same rule a shared one takes (issue #11): a fork with its own id,
+   * the arrived name recorded as provenance, so an import can never overwrite or
+   * merge into what is already here.
+   */
+  function importCollection(arrived: ArrivedCollection): void {
+    const made = received(collections ?? [], arrived, crypto.randomUUID())
+
+    keepCollections(withCreated(collections ?? [], made))
+    chosenCollection = made.id
+    importNotice = `Added "${made.name}" to your collections.`
+  }
+
+  /** Read a file the visitor chose, and do what it asks, saying plainly what happened. */
+  async function importFile(file: File): Promise<void> {
+    const imported = importedFrom(await readFile(file), { newId: () => crypto.randomUUID() })
+
+    if (imported.kind === 'declined') {
+      importNotice = imported.message
+      return
+    }
+    if (imported.kind === 'collection') {
+      importCollection(imported.collection)
+      return
+    }
+
+    await importLayout(imported.layout, imported.name)
+  }
+
+  /** The file input's answer, once the visitor has chosen something. */
+  function fileChosen(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement
+    const chosen = input.files?.[0]
+
+    // Cleared so that choosing the same file twice in a row is still an import:
+    // an input that keeps its value fires no change the second time.
+    input.value = ''
+
+    if (chosen !== undefined) {
+      void importFile(chosen)
+    }
+  }
+
+  /** Offer the open Layout as a file, named for what it is called here. */
+  function exportLayout(): void {
+    const current = layout
+
+    if (current === undefined) {
+      return
+    }
+
+    downloadFile(fileNameFor(openName), encodeFile({ kind: 'layout', layout: current }, openName))
+  }
+
+  /** Offer one of the visitor's Collections as a file. */
+  function exportCollection(id: string): void {
+    const chosen = (collections ?? []).find((each) => each.id === id)
+
+    if (chosen === undefined) {
+      return
+    }
+
+    downloadFile(
+      fileNameFor(chosen.name),
+      encodeFile({
+        kind: 'collection',
+        collection: { name: chosen.name, vehicles: chosen.vehicles },
+      }),
+    )
   }
 
   // A Layout that arrived in the link, opened once the component is up: an
@@ -892,7 +1055,28 @@
   <header>
     <h1>{APP_TITLE}</h1>
     <p>{APP_TAGLINE}</p>
+    <div class="bar">
+      <!-- Import is here rather than beside Share because a file may bring its
+           own Site, so it has to be reachable before any place is open. The
+           input is the only way a page may ask for a file, and cannot be opened
+           except by a click the visitor made, so the button clicks it. -->
+      <button type="button" onclick={() => importInput?.click()}>Import a file</button>
+      <input
+        class="importing"
+        type="file"
+        accept=".json,application/json"
+        aria-label="Choose a lotplanner file to import"
+        bind:this={importInput}
+        onchange={fileChosen}
+      />
+    </div>
   </header>
+
+  {#if importNotice !== ''}
+    <!-- What became of the last import. Announced rather than thrown: a file
+         that could not be read is an answer, and nothing already stored moved. -->
+    <p class="notice" role="status">{importNotice}</p>
+  {/if}
 
   {#if declined !== ''}
     <!-- A link that arrived but could not be opened. Announced rather than
@@ -968,6 +1152,7 @@
           oncreate={createCollection}
           onrename={renameCollection}
           ondelete={deleteCollection}
+          onexport={exportCollection}
           onaddvehicle={addVehicleToCollection}
           oneditvehicle={editVehicleInCollection}
           onremovevehicle={removeVehicleFromCollection}
@@ -1038,6 +1223,7 @@
           Redo
         </button>
         <button type="button" onclick={() => void share()}>Share</button>
+        <button type="button" onclick={exportLayout}>Export</button>
         <!-- Freezes the vehicles so that every gesture pans the picture, for
              reviewing what is finished and for moving the view while placing
              many. A view of the session rather than part of the work, so it is
@@ -1157,6 +1343,12 @@
     background: color-mix(in srgb, gold 30%, transparent);
     margin: 0;
     padding: 0.5rem 0.75rem;
+  }
+
+  /* The file input is opened by the Import button above; it is not a control to
+     tab to, and not something to show. */
+  .importing {
+    display: none;
   }
 
   .sharing {

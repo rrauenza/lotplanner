@@ -27,6 +27,8 @@
     oncreate: () => void
     onrename: (id: string, name: string) => void
     ondelete: (id: string) => void
+    /** Offer this collection as a file to keep or send. */
+    onexport: (id: string) => void
     onaddvehicle: (id: string, vehicle: Vehicle) => void
     oneditvehicle: (id: string, before: Vehicle, after: Vehicle) => void
     onremovevehicle: (id: string, vehicle: Vehicle) => void
@@ -40,6 +42,7 @@
     oncreate,
     onrename,
     ondelete,
+    onexport,
     onaddvehicle,
     oneditvehicle,
     onremovevehicle,
@@ -240,6 +243,17 @@
            else: there are no accounts, so nothing else is known or claimed. -->
       <p class="source">Received from {shown.source}</p>
     {/if}
+
+    <div class="bar">
+      <!-- A file, because this collection may be too much for a link and is the
+           way to keep it or send it outside one. -->
+      <button
+        type="button"
+        onclick={() => {
+          onexport(shown.id)
+        }}>Export this collection</button
+      >
+    </div>
 
     {#if complaint !== ''}
       <p role="alert">{complaint}</p>

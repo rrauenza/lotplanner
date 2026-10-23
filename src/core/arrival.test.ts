@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { arrivalFrom, COLLECTION_NOT_OPENED } from './arrival'
+import { arrivalFrom, COLLECTION_NOT_OPENED, importedFrom } from './arrival'
 import { CODEC_VERSION, encodeArtifact, type Artifact } from './codec'
 import { testCompressor } from './deflate-for-tests'
+import { encodeFile } from './file'
 import { boundsForExtent } from './geometry'
 import { encodePayload, toBase64Url } from './link'
 import type { Layout } from './layout'
@@ -101,5 +102,46 @@ describe('what a page load is', () => {
       kind: 'declined',
       message: COLLECTION_NOT_OPENED,
     })
+  })
+})
+
+describe('what an imported file is', () => {
+  it('is a Layout to open, under the name it was exported with', () => {
+    const read = importedFrom(encodeFile({ kind: 'layout', layout: layout() }, 'Option A'), {
+      newId: () => 'made-up',
+    })
+
+    expect(read.kind).toBe('layout')
+    expect(read.kind === 'layout' ? read.name : '').toBe('Option A')
+    expect(read.kind === 'layout' ? read.layout.placements : []).toHaveLength(1)
+    expect(read.kind === 'layout' ? read.layout.siteId : '').toBe('cupertino-sample')
+  })
+
+  it('is a Collection to keep, not a Layout to show', () => {
+    const read = importedFrom(
+      encodeFile({ kind: 'collection', collection: { name: 'Yard', vehicles: [SEMI] } }),
+    )
+
+    expect(read).toStrictEqual({
+      kind: 'collection',
+      collection: { name: 'Yard', vehicles: [SEMI] },
+    })
+  })
+
+  it('declines a file it cannot read, in plain words rather than throwing', () => {
+    const read = importedFrom('not a file at all')
+
+    expect(read.kind).toBe('declined')
+    expect(read.kind === 'declined' ? read.message : '').toContain('lotplanner')
+  })
+
+  it('declines a file from a newer app rather than misreading it', () => {
+    const ahead = JSON.parse(encodeArtifact({ kind: 'layout', layout: layout() })) as unknown[]
+    ahead[1] = CODEC_VERSION + 1
+
+    const read = importedFrom(JSON.stringify({ format: 'lotplanner', artifact: ahead }))
+
+    expect(read.kind).toBe('declined')
+    expect(read.kind === 'declined' ? read.message : '').toContain('newer version')
   })
 })
