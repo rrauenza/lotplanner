@@ -8,9 +8,13 @@ A Layout and a Vehicle Collection can leave the browser as a link or, later, as 
 spelled the same way either way. The payload is compact JSON — arrays rather than objects, so no field
 name is paid for — with every ground position quantised to the centimetre and every angle to a tenth of
 a degree. A link then compresses that text with `deflate-raw` and spells the bytes as unpadded
-base64url after the fragment. A plausible 40-placement layout of four vehicle types measures **672
-characters including the prefix**, inside the roughly 750 the spec allows; the number is asserted in
-`src/core/link.test.ts`, using the browser's own `CompressionStream`, so it cannot drift unnoticed.
+base64url after the fragment. A plausible, frame-aligned 40-placement layout of four vehicle types measures
+**672 characters including the prefix**, inside the roughly 750 the spec allows. `src/core/link.test.ts`
+measures that with the browser's own `CompressionStream` and asserts a narrow band around it — not the
+whole budget, so a regression to 745 fails the test. That figure is not a promise for every layout: the
+same suite measures a hostile layout — eight vehicle types at forty unaligned rotations — at about
+**930 characters**, because rotation is the entropy and a real lot aligns its vehicles to the frame. The
+roughly 750 holds for a real lot, not universally.
 
 **Every artifact carries a kind and a version in its first two elements.** This is the decision that
 cannot be retrofitted: unversioned data in the wild cannot be identified as anything, so a reader can
