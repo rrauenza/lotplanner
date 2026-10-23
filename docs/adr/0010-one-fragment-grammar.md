@@ -7,9 +7,9 @@ status: accepted
 Two things now reach the app by URL fragment: the hidden creator mode (ADR 0006) and a shared artifact
 (ADR 0009). They share one grammar, read in one place, so they cannot collide:
 
-    #create              the creator, adding a Site
-    #create/<site-id>    the creator, correcting a Site
-    #layout/<payload>    a shared Layout, as the codec and link spell it
+    #create               the creator, adding a Site
+    #create/<site-id>     the creator, correcting a Site
+    #layout/<payload>     a shared Layout, as the codec and link spell it
     #collection/<payload> a shared Collection, the same way
 
 The first word after the `#` is the route and decides everything. A word this app does not recognise
@@ -44,5 +44,5 @@ keep in step, and the day they disagree is the day a visitor lands somewhere the
   is `src/core/arrival.ts`, tested beside it.
 - A link made with a newer version of the app opens, decodes, and is refused with a sentence rather than
   silently misread (ADR 0009).
-- A Collection link decodes but has nowhere to land yet; it says so, and issue #14 gives Collections
-  their file and their opening screen.
+- A Collection link is recognised but has nowhere to land yet; it says so, and issue #14 gives
+  Collections their file and their opening screen.
