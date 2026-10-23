@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { encodeArtifact, type Artifact } from './codec'
-import { testCompressor } from './deflate-for-tests'
+import { browserCompressor as testCompressor } from '../browser/compression'
 import { boundsForExtent } from './geometry'
 import { type Layout, type Placement } from './layout'
 import { decodePayload, encodePayload, fromBase64Url, toBase64Url } from './link'
@@ -12,10 +12,10 @@ import { vehicle, type Vehicle } from './vehicle'
  * the size a link is allowed.
  *
  * Compression is an effect, so a real deflate is injected here exactly as the
- * browser's is in the app - which is what lets the size the ticket cares about
- * be measured rather than guessed. Node's raw deflate and the browser's
- * `deflate-raw` are the same algorithm, so the figure below is the figure the
- * app produces; the app's own adapter is exercised in the end-to-end suite.
+ * browser's is in the app: this imports the app's own adapter rather than a test
+ * double, which is what lets the size the ticket cares about be measured rather
+ * than guessed. A byte-for-byte copy of the adapter used to live beside the core
+ * and has been deleted, so the two cannot drift.
  */
 
 const SEMI = vehicle({

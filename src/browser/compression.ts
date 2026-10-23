@@ -9,10 +9,10 @@ import type { Compressor } from '../core/link'
  * smaller. The core decides *what* is compressed and *how* the bytes are spelled
  * as characters (link.ts); this adapter only moves the bytes.
  *
- * Deliberately untested, along with the other adapters. What is worth testing -
- * the compact spelling, the size it comes to and the round trip - is tested in
- * the core against this very API, so the figure the tests assert is the figure
- * the app produces.
+ * Deliberately untested by an end-to-end suite of its own - a test here would be
+ * testing `CompressionStream`. What is worth testing - the compact spelling, the
+ * size it comes to and the round trip - is tested in the core, which imports this
+ * very adapter, so the figure the tests assert is the figure the app produces.
  */
 export const browserCompressor: Compressor = {
   async deflate(text: string): Promise<Uint8Array> {

@@ -59,20 +59,25 @@ async function collectionsRecord(page: Page): Promise<string | null> {
 }
 
 /**
- * A `#collection/...` link carrying this collection, made the way the app makes
- * one: the codec's own tuple shape, deflated raw and spelled as unpadded
- * base64url. Compression comes from the platform API the app itself uses, so the
- * payload is a real one rather than a fixture that only this test understands.
+ * A link carrying this artifact, made the way the app makes one: the codec's own
+ * tuple shape, deflated raw and spelled as unpadded base64url. Compression comes
+ * from the platform API the app itself uses, so the payload is a real one rather
+ * than a fixture that only this test understands.
  */
+async function linkCarrying(route: 'layout' | 'collection', artifact: unknown): Promise<string> {
+  const text = JSON.stringify(artifact)
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'))
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
+
+  return `#${route}/${Buffer.from(bytes).toString('base64url')}`
+}
+
+/** A `#collection/...` link carrying this collection. */
 async function collectionLink(collection: {
   readonly name: string
   readonly vehicles: readonly (readonly unknown[])[]
 }): Promise<string> {
-  const text = JSON.stringify(['collection', 1, collection.name, collection.vehicles])
-  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'))
-  const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
-
-  return `#collection/${Buffer.from(bytes).toString('base64url')}`
+  return linkCarrying('collection', ['collection', 1, collection.name, collection.vehicles])
 }
 
 /** The Layouts inside the Site's saved record. */
@@ -227,6 +232,31 @@ test('a recipient can edit the arrangement and share it on again', async ({ brow
   await thirdContext.close()
   await recipientContext.close()
   await sender.context.close()
+})
+
+test('refuses a broken or too-new link in plain words, and raises nothing', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+
+  await serveImagery(page)
+  await page.goto('./')
+
+  // A payload that is base64url but not deflate output at all.
+  await page.goto(new URL('#layout/not-actually-deflate', page.url()).href)
+  await expect(page.locator('p.notice')).toContainText('does not look like')
+
+  // The visitor's own page is still underneath it, so the nav is there to use.
+  await expect(page.getByRole('button', { name: 'Cupertino sample' })).toBeVisible()
+
+  // A real payload written by a newer app than this one: the codec refuses it
+  // before reading anything, so only the version matters.
+  const ahead = await linkCarrying('layout', ['layout', 999])
+  await page.goto(new URL(ahead, page.url()).href)
+  await expect(page.locator('p.notice')).toContainText('newer version')
+  await expect(page.getByRole('button', { name: 'Cupertino sample' })).toBeVisible()
+
+  // Refusing politely means no uncaught error reached the page.
+  expect(errors).toEqual([])
 })
 
 test('offers a shared Collection, and opening it changes nothing', async ({ page }) => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { arrivalFrom, importedFrom } from './arrival'
+import { browserCompressor as testCompressor } from '../browser/compression'
 import { CODEC_VERSION, encodeArtifact, type Artifact } from './codec'
-import { testCompressor } from './deflate-for-tests'
 import { encodeFile } from './file'
 import { boundsForExtent } from './geometry'
 import { encodePayload, toBase64Url } from './link'
