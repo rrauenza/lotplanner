@@ -1,9 +1,11 @@
 <script lang="ts">
   import { APP_TAGLINE, APP_TITLE } from './app-info'
   import { followAttribution } from './browser/attribution'
+  import { collectionEffects } from './browser/collections-store'
   import { imageryEffects } from './browser/imagery-store'
   import { savedEffects } from './browser/saved-store'
   import { showPicture, type ShownPicture } from './browser/picture'
+  import Collections from './components/Collections.svelte'
   import Layouts from './components/Layouts.svelte'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
@@ -47,6 +49,19 @@
   } from './core/saved'
   import type { Site } from './core/site'
   import type { Vehicle } from './core/vehicle'
+  import {
+    SYSTEM_COLLECTION,
+    loadCollections,
+    nextCollectionName,
+    withCreated,
+    withEditedVehicle as withEditedVehicleInCollection,
+    withRenamed as withRenamedCollection,
+    withVehicle,
+    withoutCollection,
+    withoutVehicle,
+    writeCollections,
+    type VehicleCollection,
+  } from './core/vehicle-collection'
   import { SITES } from './manifest'
 
   /** The one thing the App asks of the map: where a screen point is on the ground. */
@@ -84,6 +99,29 @@
   let layoutsUp = $state(false)
 
   /**
+   * The visitor's own Vehicle Collections, or undefined until they have been
+   * read.
+   *
+   * Undefined rather than an empty list, so that the palette does not offer to
+   * make one before the read has finished - a collection made in that moment
+   * would be written over by the read's own answer.
+   */
+  let collections = $state<readonly VehicleCollection[] | undefined>(undefined)
+
+  /** Whether they will survive the session, and what to say if not. */
+  let collectionsSaving = $state<Saving>(KEPT)
+
+  /**
+   * Which collection the palette is showing, and which the Collections sheet is
+   * open on. A view of this session, like the opacity: nothing records it, and a
+   * reload starts on the System Collection.
+   */
+  let chosenCollection = $state(SYSTEM_COLLECTION.id)
+
+  /** Whether the Collections sheet is up. */
+  let collectionsUp = $state(false)
+
+  /**
    * How see-through every placed vehicle is drawn.
    *
    * A view of this session rather than part of the work, like the map's own
@@ -112,6 +150,9 @@
   let waiting: { readonly siteId: string; readonly work: readonly SavedLayout[] } | undefined
 
   let writing: ReturnType<typeof setTimeout> | undefined
+
+  /** The same, for the visitor's collections: one write once the edits stop. */
+  let collectionsWriting: ReturnType<typeof setTimeout> | undefined
 
   /** The name of the Layout being worked on, kept or not. */
   const openName = $derived(savedWith(savedLayouts, openId)?.name ?? nextName(savedLayouts))
@@ -199,12 +240,110 @@
 
   function leaving(): void {
     void write()
+    void writeCollectionsNow()
   }
 
   function hidden(): void {
     if (document.visibilityState === 'hidden') {
       void write()
+      void writeCollectionsNow()
     }
+  }
+
+  /**
+   * The visitor's collections, read once when the app opens.
+   *
+   * The read's answer is taken only if nothing has been made in the meantime, so
+   * that a collection made in the moment before storage answered cannot be
+   * written over by what storage held a moment before that.
+   */
+  async function openCollections(): Promise<void> {
+    const loaded = await loadCollections(collectionEffects)
+
+    collections ??= loaded.collections
+
+    collectionsSaving = loaded.saving
+  }
+
+  /**
+   * The visitor's collections as they now stand, written shortly after.
+   *
+   * Kept in memory in the meantime, like a Layout's save: the same
+   * write-when-the-edits-stop shape, for the same reason - the phone call this
+   * is all for can arrive in the moment after an edit.
+   */
+  function keepCollections(next: readonly VehicleCollection[]): void {
+    collections = next
+    clearTimeout(collectionsWriting)
+    collectionsWriting = setTimeout(() => {
+      void writeCollectionsNow()
+    }, WRITE_AFTER_MILLISECONDS)
+  }
+
+  async function writeCollectionsNow(): Promise<void> {
+    clearTimeout(collectionsWriting)
+
+    if (collections === undefined) {
+      return
+    }
+
+    collectionsSaving = await writeCollections(collections, collectionEffects)
+  }
+
+  /**
+   * A new collection, named for now and renamed as soon as it appears.
+   *
+   * The name is a placeholder that has to be a name: nothing here can guess what
+   * a fleet is for, and the box is right there next to the new row.
+   */
+  function createCollection(): void {
+    const made: VehicleCollection = {
+      id: crypto.randomUUID(),
+      name: nextCollectionName(collections ?? []),
+      vehicles: [],
+    }
+
+    keepCollections(withCreated(collections ?? [], made))
+    // Shown at once, so the palette and the sheet are looking at the new one
+    // rather than at whatever was chosen before it.
+    chosenCollection = made.id
+  }
+
+  function renameCollection(id: string, name: string): void {
+    keepCollections(withRenamedCollection(collections ?? [], id, name))
+  }
+
+  function deleteCollection(id: string): void {
+    keepCollections(withoutCollection(collections ?? [], id))
+
+    // The palette cannot show a collection that is not there any more.
+    if (chosenCollection === id) {
+      chosenCollection = SYSTEM_COLLECTION.id
+    }
+  }
+
+  function addVehicleToCollection(id: string, added: Vehicle): void {
+    keepCollections(withVehicle(collections ?? [], id, added))
+  }
+
+  function editVehicleInCollection(id: string, before: Vehicle, after: Vehicle): void {
+    keepCollections(withEditedVehicleInCollection(collections ?? [], id, before, after))
+  }
+
+  function removeVehicleFromCollection(id: string, removed: Vehicle): void {
+    keepCollections(withoutVehicle(collections ?? [], id, removed))
+  }
+
+  function chooseCollection(id: string): void {
+    chosenCollection = id
+  }
+
+  function showCollections(): void {
+    collectionsUp = true
+  }
+
+  function closeCollections(): void {
+    collectionsUp = false
   }
 
   /**
@@ -323,6 +462,17 @@
   /** Whether there is anywhere to go back to, or forward to. */
   const undoable = $derived(editor !== undefined && canUndo(editor))
   const redoable = $derived(editor !== undefined && canRedo(editor))
+
+  /**
+   * What will not be kept, if anything will not.
+   *
+   * One notice rather than one per kind of work: a screen reader handed two at
+   * once reads them as two problems, and the visitor has the same one either
+   * way - nothing here will be here tomorrow.
+   */
+  const notice = $derived(
+    saving.kept ? (collectionsSaving.kept ? undefined : collectionsSaving.message) : saving.message,
+  )
 
   function undoEdit(): void {
     const current = editor
@@ -545,6 +695,11 @@
       attribution = text
     }),
   )
+
+  /** The visitor's collections are read once, as the app opens. */
+  $effect(() => {
+    void openCollections()
+  })
 </script>
 
 <svelte:window onkeydown={shortcut} onpagehide={leaving} onvisibilitychange={hidden} />
@@ -590,13 +745,29 @@
         onmove={movePlacement}
         onrotate={rotatePlacement}
       />
-      {#if !saving.kept}
+      {#if notice !== undefined}
         <!-- Over the photograph rather than in the column, for the reason the
              sheets are: a notice arriving must not resize the map and move the
              ground under whoever is working on it. -->
-        <p class="notsaved" role="status">{saving.message}</p>
+        <p class="notsaved" role="status">{notice}</p>
       {/if}
-      {#if layoutsUp}
+      {#if collectionsUp}
+        <!-- The visitor's own collections, over the photograph for the same
+             reason the Layouts sheet is: what a collection holds is read against
+             the vehicles on the ground, and opening it must not resize the map. -->
+        <Collections
+          collections={collections ?? []}
+          chosen={chosenCollection}
+          onchoose={chooseCollection}
+          oncreate={createCollection}
+          onrename={renameCollection}
+          ondelete={deleteCollection}
+          onaddvehicle={addVehicleToCollection}
+          oneditvehicle={editVehicleInCollection}
+          onremovevehicle={removeVehicleFromCollection}
+          onclose={closeCollections}
+        />
+      {:else if layoutsUp}
         <!-- The Site's saved Layouts. A sheet over the photograph for the same
              reason the vehicle form is one: a list of options for a place is
              read against the place itself, and opening it must not move the
@@ -651,7 +822,14 @@
       </button>
     </div>
     <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
-    <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
+    <Palette
+      collections={collections ?? []}
+      chosen={chosenCollection}
+      onchoose={chooseCollection}
+      onmanage={showCollections}
+      ondrop={dropFrom}
+      onplace={placeInTheMiddle}
+    />
     <!-- Here even before it is known, so that the credit arriving cannot resize
          the map either. -->
     <p class="credit">{attribution}</p>

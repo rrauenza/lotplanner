@@ -55,6 +55,39 @@ export function vehicle(input: VehicleInput): Vehicle {
 }
 
 /**
+ * A Vehicle read out of something not trusted: storage, or a file someone sent.
+ *
+ * A record can be from an older version of this app, half-written, or put there
+ * by hand, so what can be read is turned into a Vehicle by the one constructor -
+ * the rules about what a Vehicle may be are not repeated here - and what cannot
+ * is reported as nothing. The caller decides whether that loses one vehicle or
+ * the whole record it was found in.
+ */
+export function readVehicle(value: unknown): Vehicle | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+
+  const { name, shortLabel, widthInches, lengthInches, colour } = value as Record<string, unknown>
+
+  if (
+    typeof name !== 'string' ||
+    typeof shortLabel !== 'string' ||
+    !isNumber(widthInches) ||
+    !isNumber(lengthInches) ||
+    (typeof colour !== 'string' && !isNumber(colour))
+  ) {
+    return undefined
+  }
+
+  try {
+    return vehicle({ name, shortLabel, widthInches, lengthInches, colour })
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Whether two Vehicles are the same one, field for field.
  *
  * A Layout keeps its vehicles as copies rather than as references to anything, so
@@ -113,4 +146,9 @@ function wholeInches(value: number, what: string): number {
     throw new Error(`A vehicle ${what} has to be a whole number of inches.`)
   }
   return value
+}
+
+/** Finite, because a NaN that reached the map would draw nothing anywhere. */
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
 }

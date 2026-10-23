@@ -1,18 +1,39 @@
 <script lang="ts">
-  import { SYSTEM_COLLECTION_NAME, systemVehicles } from '../core/collection'
   import { cssColour } from '../core/colour'
   import { toFeetAndInches } from '../core/units'
+  import {
+    SYSTEM_COLLECTION,
+    allCollections,
+    type VehicleCollection,
+  } from '../core/vehicle-collection'
   import type { Vehicle } from '../core/vehicle'
   import { isDragStart, type Point } from './pointer'
 
   interface Props {
+    /** The visitor's own collections, in the order they were made. */
+    collections: readonly VehicleCollection[]
+    /** Which one is being shown. A view of this session, never written down. */
+    chosen: string
+    /** Show another collection's vehicles. */
+    onchoose: (id: string) => void
+    /** Open the sheet that makes, names, fills and deletes collections. */
+    onmanage: () => void
     /** A vehicle was dragged off the palette and let go here. */
     ondrop: (vehicle: Vehicle, point: Point) => void
     /** A vehicle was chosen with no pointer behind it, so it goes somewhere sensible. */
     onplace: (vehicle: Vehicle) => void
   }
 
-  let { ondrop, onplace }: Props = $props()
+  let { collections, chosen, onchoose, onmanage, ondrop, onplace }: Props = $props()
+
+  /**
+   * What the palette is showing: the chosen collection, or the System Collection
+   * when the choice is one that is no longer there - so the palette is never
+   * empty, whichever collection was deleted underneath it.
+   */
+  const shown = $derived(
+    allCollections(collections).find((each) => each.id === chosen) ?? SYSTEM_COLLECTION,
+  )
 
   let carried: Vehicle | undefined = $state(undefined)
   let at = $state<Point>({ x: 0, y: 0 })
@@ -58,11 +79,38 @@
 <svelte:window onpointermove={moved} onpointerup={released} onpointercancel={cancelled} />
 
 <aside aria-label="Vehicles">
-  <!-- The panel is the vehicles; the heading names the collection they are from,
-       which is the System Collection until this app has collections of its own. -->
-  <h2>{SYSTEM_COLLECTION_NAME}</h2>
+  <!-- Which collections there are, and which one is being shown. The System
+       Collection is always the first tab: it cannot be edited or deleted, and
+       the palette is never empty because it is always one of the choices. -->
+  <div class="collections">
+    {#each allCollections(collections) as collection (collection.id)}
+      <button
+        type="button"
+        aria-pressed={collection.id === shown.id}
+        onclick={() => {
+          onchoose(collection.id)
+        }}
+      >
+        {collection.name}
+      </button>
+    {/each}
+    <button type="button" onclick={onmanage}>Collections</button>
+  </div>
+
+  <h2>{shown.name}</h2>
+
+  {#if shown.source !== undefined}
+    <!-- Where a received collection came from, said plainly so a visitor can
+         tell their own work from somebody else's. A name, and nothing more:
+         there are no accounts to say anything else about it. -->
+    <p class="source">Received from {shown.source}</p>
+  {/if}
+
   <ul>
-    {#each systemVehicles as vehicle (vehicle.name)}
+    <!-- Keyed by position rather than by name, because a visitor's own
+         collection can hold two vehicles that share a name, and two chips with
+         the same key is a crash rather than an oddity. -->
+    {#each shown.vehicles as vehicle, index (index)}
       <li>
         <button
           type="button"
@@ -83,6 +131,10 @@
           <span class="size">{size(vehicle)}</span>
         </button>
       </li>
+    {:else}
+      <!-- A collection the visitor has just made has nothing in it yet, and
+           saying so is kinder than an empty space under its name. -->
+      <li>Nothing in this collection yet.</li>
     {/each}
   </ul>
 </aside>
@@ -103,10 +155,34 @@
     overflow-y: auto;
   }
 
+  .collections {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .collections button {
+    font: inherit;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.5rem;
+  }
+
+  .collections [aria-pressed='true'] {
+    font-weight: 600;
+    outline: 2px solid currentcolor;
+  }
+
   h2 {
     font-size: 0.875rem;
     font-weight: 600;
     margin: 0 0 0.375rem;
+  }
+
+  .source {
+    font-size: 0.75rem;
+    margin: 0 0 0.375rem;
+    opacity: 0.75;
   }
 
   ul {
@@ -116,6 +192,10 @@
     list-style: none;
     margin: 0;
     padding: 0;
+  }
+
+  li {
+    font-size: 0.75rem;
   }
 
   button {
