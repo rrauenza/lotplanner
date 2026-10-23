@@ -69,6 +69,38 @@ export async function openTheSite(page: Page): Promise<void> {
 }
 
 /**
+ * Never touch a geocoder: the creator mode is the only thing that asks one, and
+ * a real request would spend a shared, rate-limited service on a test run. The
+ * records are answered as they arrive, so the address the test types comes back
+ * as a place the core can read.
+ */
+export async function serveGeocoder(page: Page, records: readonly unknown[]): Promise<string[]> {
+  const queries: string[] = []
+
+  await page.route('**/nominatim.openstreetmap.org/**', async (route) => {
+    queries.push(route.request().url())
+    await route.fulfill({ json: records })
+  })
+
+  return queries
+}
+
+/**
+ * Never touch the tile server either. The coarse basemap is navigation only, and
+ * one pixel stands in for every tile so the map can be built without a network.
+ */
+export async function serveTiles(page: Page): Promise<string[]> {
+  const requests: string[] = []
+
+  await page.route('**/tile.openstreetmap.org/**', async (route) => {
+    requests.push(route.request().url())
+    await route.fulfill({ status: 200, contentType: 'image/png', body: PIXEL })
+  })
+
+  return requests
+}
+
+/**
  * From here down, the vehicles themselves.
  *
  * The fixture Site is the reference again. Its frame is 137 m across, and at
@@ -187,9 +219,14 @@ export async function touchDrag(page: Page, from: Point, to: Point, steps = 8): 
   await cdp.detach()
 }
 
-/** Take hold of the selected vehicle's handle and turn it to a bearing. */
-export async function turnTo(page: Page, centre: Point, degrees: number): Promise<void> {
-  const handle = await page.locator('.rotation-handle').boundingBox()
+/** Take hold of a handle and turn it to a bearing, about a centre on the screen. */
+export async function turnHandle(
+  page: Page,
+  selector: string,
+  centre: Point,
+  degrees: number,
+): Promise<void> {
+  const handle = await page.locator(selector).boundingBox()
   expect(handle).not.toBeNull()
 
   const grip = middleOf(handle ?? { x: 0, y: 0, width: 0, height: 0 })
@@ -200,6 +237,11 @@ export async function turnTo(page: Page, centre: Point, degrees: number): Promis
     x: centre.x + reach * Math.sin(radians),
     y: centre.y - reach * Math.cos(radians),
   })
+}
+
+/** Take hold of the selected vehicle's handle and turn it to a bearing. */
+export async function turnTo(page: Page, centre: Point, degrees: number): Promise<void> {
+  await turnHandle(page, '.rotation-handle', centre, degrees)
 }
 
 /** The angle a vehicle's label is drawn at, which is its own angle turned back. */

@@ -3,9 +3,9 @@ import type { Site } from './core/site'
 /**
  * The Sites a visitor chooses between. The manifest is the whole list.
  *
- * Hand-written and one entry deep for now. The creator mode, when it exists,
- * authors these by drawing a rectangle over the imagery and emits the entry to
- * paste in here, so this file is a placeholder that a real list will replace.
+ * Hand-written and one entry deep for now. The creator mode authors these by
+ * drawing a rectangle over the imagery and emits the entry to paste in here, so
+ * this file is a placeholder that a real list will replace.
  * Until then this entry doubles as the end-to-end fixture, which is why the
  * numbers are round: the tests assert against them.
  *
