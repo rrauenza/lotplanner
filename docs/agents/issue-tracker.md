@@ -4,6 +4,21 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 ## Conventions
 
+- **`gh` writes need a writable token, and the environment is the usual reason they fail.** A
+  refusal reading `Resource not accessible by personal access token` while reads still work means
+  `gh` fell back to the read-only token in `~/.config/gh/hosts.yml`, not that the repo forbids you.
+  On this machine `~/.bashrc` exports a repo-scoped token as `GH_TOKEN` — but only in an
+  _interactive_ shell whose working directory is inside this repo, since it is scoped to this repo
+  deliberately. A non-interactive shell, a script or an agent must therefore set it for the command:
+
+  ```sh
+  GH_TOKEN="$(cat ~/.config/gh/lotplanner.token)" gh issue comment 12 --body "…"
+  ```
+
+  Never echo the value, and never write it into a file, an environment file or a commit. Git pushes
+  do not use it at all: this clone pushes over SSH, so a working `git push` says nothing about
+  whether `gh` can write.
+
 - **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
 - **Read an issue**: `gh issue view <number> --json number,title,body,labels,comments`.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
