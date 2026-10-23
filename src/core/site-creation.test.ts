@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import { CONTEXT_MARGIN_METRES, extentForSite, type Site } from './site'
 import { draftFrom, manifestEntry, manifestEntryText, siteIdFor } from './site-creation'
-import type { Place } from './geocoding'
+import type { Candidate } from './geocoding'
 
-const PLACE: Place = {
+const CANDIDATE: Candidate = {
   name: 'Vallco lot',
   address: '10123 N Wolfe Rd, Cupertino, California, United States',
   position: { latitude: 37.3318, longitude: -122.0312 },
@@ -44,8 +44,8 @@ describe('siteIdFor', () => {
 })
 
 describe('manifestEntry', () => {
-  it('takes the place as the origin and the drawing as its frame', () => {
-    const entry = manifestEntry({ place: PLACE, frame: FRAME }, [])
+  it('takes the candidate as the origin and the drawing as its frame', () => {
+    const entry = manifestEntry({ candidate: CANDIDATE, frame: FRAME }, [])
 
     expect(entry).toStrictEqual({
       id: 'vallco-lot',
@@ -56,8 +56,14 @@ describe('manifestEntry', () => {
   })
 
   it('records an angle as a tenth of a degree, in the half turn a person reads', () => {
-    const quarter = manifestEntry({ place: PLACE, frame: { ...FRAME, rotationDegrees: 32.47 } }, [])
-    const turned = manifestEntry({ place: PLACE, frame: { ...FRAME, rotationDegrees: 197.53 } }, [])
+    const quarter = manifestEntry(
+      { candidate: CANDIDATE, frame: { ...FRAME, rotationDegrees: 32.47 } },
+      [],
+    )
+    const turned = manifestEntry(
+      { candidate: CANDIDATE, frame: { ...FRAME, rotationDegrees: 197.53 } },
+      [],
+    )
 
     expect(quarter.frame?.rotationDegrees).toBe(32.5)
     // 197.53 is the same rectangle as 17.53, which no vehicle laid against it can tell apart.
@@ -67,7 +73,7 @@ describe('manifestEntry', () => {
   it('records a distance to the centimetre', () => {
     const entry = manifestEntry(
       {
-        place: PLACE,
+        candidate: CANDIDATE,
         frame: {
           centre: { eastMetres: 12.3449, northMetres: -3.4551 },
           lengthMetres: 137.504,
@@ -84,7 +90,10 @@ describe('manifestEntry', () => {
   })
 
   it('stays usable by the visitor app as it stands', () => {
-    const entry = manifestEntry({ place: PLACE, frame: { ...FRAME, rotationDegrees: 90 } }, [])
+    const entry = manifestEntry(
+      { candidate: CANDIDATE, frame: { ...FRAME, rotationDegrees: 90 } },
+      [],
+    )
     const extent = extentForSite(entry)
 
     // A frame 137.5 long and 98 wide, turned so its length runs east: half its
@@ -97,7 +106,7 @@ describe('manifestEntry', () => {
   })
 
   it('leaves the frame out when none was drawn', () => {
-    const entry = manifestEntry({ place: PLACE }, [])
+    const entry = manifestEntry({ candidate: CANDIDATE }, [])
 
     expect('frame' in entry).toBe(false)
     expect(entry.frame).toBeUndefined()
@@ -105,7 +114,7 @@ describe('manifestEntry', () => {
 
   it('numbers a name the manifest already uses rather than repeating its id', () => {
     const taken: Site[] = [{ ...EXISTING, id: 'vallco-lot', name: 'Vallco lot' }]
-    const second = manifestEntry({ place: PLACE, frame: FRAME }, taken)
+    const second = manifestEntry({ candidate: CANDIDATE, frame: FRAME }, taken)
 
     expect(second.id).toBe('vallco-lot-2')
   })
@@ -116,13 +125,13 @@ describe('manifestEntry', () => {
       { ...EXISTING, id: 'vallco-lot-2' },
     ]
 
-    expect(manifestEntry({ place: PLACE, frame: FRAME }, taken).id).toBe('vallco-lot-3')
+    expect(manifestEntry({ candidate: CANDIDATE, frame: FRAME }, taken).id).toBe('vallco-lot-3')
   })
 
-  it('lets two places of one name differ, since only the name spells the id', () => {
-    const first = manifestEntry({ place: PLACE, frame: FRAME }, [])
+  it('lets two candidates of one name differ, since only the name spells the id', () => {
+    const first = manifestEntry({ candidate: CANDIDATE, frame: FRAME }, [])
     const other = manifestEntry(
-      { place: { ...PLACE, address: 'Elsewhere Road, Somewhere' }, frame: FRAME },
+      { candidate: { ...CANDIDATE, address: 'Elsewhere Road, Somewhere' }, frame: FRAME },
       [first],
     )
 
@@ -130,7 +139,7 @@ describe('manifestEntry', () => {
   })
 
   it('keeps the id of a Site being corrected, even when it is renamed', () => {
-    const draft = { ...draftFrom(EXISTING), place: { ...PLACE, name: 'Cupertino north' } }
+    const draft = { ...draftFrom(EXISTING), candidate: { ...CANDIDATE, name: 'Cupertino north' } }
     const entry = manifestEntry(draft, [EXISTING])
 
     expect(entry.id).toBe('cupertino-sample')
@@ -138,31 +147,37 @@ describe('manifestEntry', () => {
   })
 
   it('will not make an entry with no name, no position or a broken frame', () => {
-    expect(() => manifestEntry({ place: { ...PLACE, name: '  ' } }, [])).toThrow()
-    expect(() =>
-      manifestEntry({ place: { ...PLACE, position: { latitude: Number.NaN, longitude: 0 } } }, []),
-    ).toThrow()
-    expect(() =>
-      manifestEntry({ place: PLACE, frame: { ...FRAME, lengthMetres: 0 } }, []),
-    ).toThrow()
-    expect(() =>
-      manifestEntry({ place: PLACE, frame: { ...FRAME, widthMetres: -1 } }, []),
-    ).toThrow()
+    expect(() => manifestEntry({ candidate: { ...CANDIDATE, name: '  ' } }, [])).toThrow()
     expect(() =>
       manifestEntry(
-        { place: PLACE, frame: { ...FRAME, centre: { eastMetres: Number.NaN, northMetres: 0 } } },
+        { candidate: { ...CANDIDATE, position: { latitude: Number.NaN, longitude: 0 } } },
         [],
       ),
     ).toThrow()
     expect(() =>
-      manifestEntry({ place: PLACE, frame: { ...FRAME, rotationDegrees: Number.NaN } }, []),
+      manifestEntry({ candidate: CANDIDATE, frame: { ...FRAME, lengthMetres: 0 } }, []),
+    ).toThrow()
+    expect(() =>
+      manifestEntry({ candidate: CANDIDATE, frame: { ...FRAME, widthMetres: -1 } }, []),
+    ).toThrow()
+    expect(() =>
+      manifestEntry(
+        {
+          candidate: CANDIDATE,
+          frame: { ...FRAME, centre: { eastMetres: Number.NaN, northMetres: 0 } },
+        },
+        [],
+      ),
+    ).toThrow()
+    expect(() =>
+      manifestEntry({ candidate: CANDIDATE, frame: { ...FRAME, rotationDegrees: Number.NaN } }, []),
     ).toThrow()
   })
 })
 
 describe('manifestEntryText', () => {
   it('writes the entry the way the entries already in the manifest are written', () => {
-    const text = manifestEntryText(manifestEntry({ place: PLACE, frame: FRAME }, []))
+    const text = manifestEntryText(manifestEntry({ candidate: CANDIDATE, frame: FRAME }, []))
 
     expect(text).toBe(
       [
@@ -182,7 +197,7 @@ describe('manifestEntryText', () => {
   })
 
   it('leaves the frame out of a Site that has none', () => {
-    const text = manifestEntryText(manifestEntry({ place: PLACE }, []))
+    const text = manifestEntryText(manifestEntry({ candidate: CANDIDATE }, []))
 
     expect(text).toBe(
       [
@@ -196,7 +211,10 @@ describe('manifestEntryText', () => {
   })
 
   it('escapes an apostrophe rather than ending the name early', () => {
-    const entry = manifestEntry({ place: { ...PLACE, name: "Bob's lot" }, frame: FRAME }, [])
+    const entry = manifestEntry(
+      { candidate: { ...CANDIDATE, name: "Bob's lot" }, frame: FRAME },
+      [],
+    )
     const text = manifestEntryText(entry)
 
     expect(text).toContain("  name: 'Bob\\'s lot',")
@@ -207,7 +225,7 @@ describe('draftFrom', () => {
   it('opens an existing Site with the rectangle it was saved with', () => {
     expect(draftFrom(EXISTING)).toStrictEqual({
       id: 'cupertino-sample',
-      place: { name: 'Cupertino sample', position: { latitude: 37.32, longitude: -122.03 } },
+      candidate: { name: 'Cupertino sample', position: { latitude: 37.32, longitude: -122.03 } },
       frame: EXISTING.frame,
     })
   })

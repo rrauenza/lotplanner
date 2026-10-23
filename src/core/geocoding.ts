@@ -13,17 +13,19 @@ import { tidy } from './text'
  */
 
 /**
- * A place the search offered, as the creator mode shows it: what to call it,
- * where it is, and its full address to tell it from the one beside it.
+ * What the search offered for a Site: a name, where it is, and usually its full
+ * address to tell it from the one beside it.
  *
- * A Site carries no address - the manifest entry has no field for one - so a
- * place standing for a Site already in the manifest has a name and a position
- * and nothing else.
+ * A candidate rather than a place, because "place" is the word for what a Site
+ * is: a search answer only becomes one when the creator confirms it and draws
+ * the frame over it. A Site carries no address - the manifest entry has no field
+ * for one - so a candidate standing for a Site already in the manifest has a
+ * name and a position and nothing else.
  */
-export interface Place {
+export interface Candidate {
   /** The short label, which is what the Site will be listed under if not renamed. */
   readonly name: string
-  /** The whole address, which is what tells two places with one name apart. */
+  /** The whole address, which is what tells two candidates with one name apart. */
   readonly address?: string
   readonly position: LatLng
 }
@@ -50,13 +52,13 @@ export interface GeocodingEffects {
  */
 export type GeocodingState =
   | { readonly status: 'idle' }
-  | { readonly status: 'found'; readonly places: readonly Place[] }
+  | { readonly status: 'found'; readonly candidates: readonly Candidate[] }
   | { readonly status: 'failed'; readonly message: string }
 
 export const GEOCODING_IDLE: GeocodingState = { status: 'idle' }
 
 /**
- * The places in a geocoder's answer.
+ * The candidates in a geocoder's answer.
  *
  * The answer is a list of records, each carrying a position and something to
  * read. A position is `lat` and `lon`, sent as strings by most geocoders and
@@ -71,26 +73,26 @@ export const GEOCODING_IDLE: GeocodingState = { status: 'idle' }
  * address that matches nothing is an ordinary answer, and a record missing its
  * position or its label is dropped rather than allowed to break the rest.
  */
-export function placesFrom(response: unknown): readonly Place[] {
+export function candidatesFrom(response: unknown): readonly Candidate[] {
   if (!Array.isArray(response)) {
     return []
   }
 
-  const places: Place[] = []
+  const candidates: Candidate[] = []
 
   for (const record of response) {
-    const place = placeFrom(record)
+    const candidate = candidateFrom(record)
 
-    if (place !== undefined) {
-      places.push(place)
+    if (candidate !== undefined) {
+      candidates.push(candidate)
     }
   }
 
-  return places
+  return candidates
 }
 
 /**
- * The places for a search, or a state saying plainly that the search failed.
+ * The candidates for a search, or a state saying plainly that the search failed.
  * Failing is reported rather than thrown, because a blank result list and a
  * broken lookup read the same to whoever is standing there looking at them.
  *
@@ -98,24 +100,24 @@ export function placesFrom(response: unknown): readonly Place[] {
  * rate-limited, and asking it about nothing spends a request on an answer
  * nobody wanted.
  */
-export async function searchPlaces(
+export async function findCandidates(
   query: string,
   effects: GeocodingEffects,
 ): Promise<GeocodingState> {
   const search = tidy(query)
 
   if (search === '') {
-    return { status: 'found', places: [] }
+    return { status: 'found', candidates: [] }
   }
 
   try {
-    return { status: 'found', places: placesFrom(await effects.search(search)) }
+    return { status: 'found', candidates: candidatesFrom(await effects.search(search)) }
   } catch {
     return { status: 'failed', message: 'The place search did not answer.' }
   }
 }
 
-function placeFrom(record: unknown): Place | undefined {
+function candidateFrom(record: unknown): Candidate | undefined {
   if (!isRecord(record)) {
     return undefined
   }

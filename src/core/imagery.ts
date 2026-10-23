@@ -1,4 +1,4 @@
-import type { Extent, LatLngBounds, MercatorBounds } from './geometry'
+import type { Extent, LatLng, LatLngBounds, MercatorBounds } from './geometry'
 import { boundsForExtent, mercatorBoundsForExtent, zoomAtNativeResolution } from './geometry'
 import { extentForSite, type Site } from './site'
 
@@ -133,21 +133,56 @@ export interface ImageryPlan {
  * nothing left to choose and the policy can be tested without a browser.
  */
 export function imageryPlanFor(site: Site, serviceUrl: string): ImageryPlan {
-  const wanted = extentForSite(site)
+  return imageryPlanForExtent(site.origin, extentForSite(site), serviceUrl)
+}
+
+/** The same plan, for a piece of ground that is not a Site's own extent. */
+export function imageryPlanForExtent(
+  origin: LatLng,
+  wanted: Extent,
+  serviceUrl: string,
+): ImageryPlan {
   const size = imagerySize(wanted, NATIVE_METRES_PER_PIXEL, MAX_IMAGE_PIXELS)
   const extent = extentMatching(size, wanted)
 
   return {
     requestUrl: exportImageUrl({
       serviceUrl,
-      mercator: mercatorBoundsForExtent(site.origin, extent),
+      mercator: mercatorBoundsForExtent(origin, extent),
       size,
     }),
-    bounds: boundsForExtent(site.origin, extent),
+    bounds: boundsForExtent(origin, extent),
     size,
     maxZoom: Math.ceil(
-      zoomAtNativeResolution((extent.halfEastMetres * 2) / size.width, site.origin.latitude),
+      zoomAtNativeResolution((extent.halfEastMetres * 2) / size.width, origin.latitude),
     ),
+  }
+}
+
+/**
+ * How big the provisional Fetch Area is, a side at a time: the service's pixel
+ * cap at the imagery's own resolution, in ground metres. Worked out from the
+ * same two constants the fetch itself uses rather than chosen by eye.
+ */
+export const PROVISIONAL_FETCH_AREA_SIDE_METRES = MAX_IMAGE_PIXELS * NATIVE_METRES_PER_PIXEL
+
+/**
+ * The Fetch Area a brand-new Site is fetched for, before anyone has drawn a
+ * frame on it: a square, centred on the candidate.
+ *
+ * A picture is fetched before anything can be drawn on it, so a new place needs
+ * some ground to plan its fetch around even though it has no frame yet. A frame
+ * drawn inside this square - up to the cap less the context margin on each side
+ * - then gets the same surroundings a visitor sees, and sits within what the
+ * creator already drew on.
+ */
+export function provisionalFetchArea(): Extent {
+  const half = PROVISIONAL_FETCH_AREA_SIDE_METRES / 2
+
+  return {
+    centre: { eastMetres: 0, northMetres: 0 },
+    halfEastMetres: half,
+    halfNorthMetres: half,
   }
 }
 

@@ -1,19 +1,19 @@
 import { orientation, type LatLng, type SiteFrame } from './geometry'
-import type { Place } from './geocoding'
+import type { Candidate } from './geocoding'
 import type { Site } from './site'
 import { tidy } from './text'
 
 /**
  * Turning what the creator drew into a manifest entry, and back again.
  *
- * The creator mode finds a place, draws a rectangle over it and turns that
+ * The creator mode finds a candidate, draws a rectangle over it and turns that
  * rectangle to match the space; what comes out is one entry for the manifest
  * (ADR 0006). None of that needs a browser, so it is decided here and the shell
  * only has to draw what these functions return.
  *
- * The **place**, not the rectangle, fixes the Site's origin. A Site is a place
- * before it is a shape: the frame is a guide that can be redrawn or left out
- * altogether, and a Site with no frame still has to open on the place rather
+ * The **candidate**, not the rectangle, fixes the Site's origin. A Site is a
+ * place before it is a shape: the frame is a guide that can be redrawn or left
+ * out altogether, and a Site with no frame still has to open on the place rather
  * than on nothing (see `UNFRAMED_EXTENT_HALF_METRES`). So the origin is the
  * position the geocoder gave, the way the hand-written entry's origin is the
  * point its maintainer chose, and the frame is an offset from it - which is the
@@ -21,7 +21,7 @@ import { tidy } from './text'
  */
 
 /**
- * A Site as the creator form works on it: the place found for it and the
+ * A Site as the creator form works on it: the candidate found for it and the
  * rectangle drawn over it. The same shape whether the form is adding a Site or
  * correcting one, so there is only one thing to build and one to show.
  *
@@ -31,8 +31,8 @@ import { tidy } from './text'
  * 0008) and a rename must not orphan a visitor's work.
  */
 export interface SiteDraft {
-  /** The place it was found at. The name here is what the creator named it. */
-  readonly place: Place
+  /** The candidate it was found at. The name here is what the creator named it. */
+  readonly candidate: Candidate
   /** The rectangle, in ground metres from the place. A guide, never a limit. */
   readonly frame?: SiteFrame
   /** The identity of the Site being corrected, when there is one. */
@@ -78,14 +78,14 @@ export function siteIdFor(name: string): string {
  * prevent. A Site being corrected keeps its own id and so cannot collide with
  * itself.
  *
- * The place's address is read by no one here. A manifest entry has no field for
- * one - it is only ever how the search list told two candidates apart - so the
- * entry a creator commits carries the place's name and its position and no
- * more.
+ * The candidate's address is read by no one here. A manifest entry has no field
+ * for one - it is only ever how the search list told two candidates apart - so
+ * the entry a creator commits carries the candidate's name and its position and
+ * no more.
  */
 export function manifestEntry(draft: SiteDraft, taken: readonly Site[]): Site {
-  const name = siteName(draft.place.name)
-  const origin = placedAt(draft.place.position)
+  const name = siteName(draft.candidate.name)
+  const origin = placedAt(draft.candidate.position)
   const frame = draft.frame === undefined ? undefined : measuredFrame(draft.frame)
 
   const entry: Site = {
@@ -140,7 +140,7 @@ export function manifestEntryText(entry: Site): string {
 export function draftFrom(site: Site): SiteDraft {
   const draft: SiteDraft = {
     id: site.id,
-    place: { name: site.name, position: site.origin },
+    candidate: { name: site.name, position: site.origin },
   }
 
   return site.frame === undefined ? draft : { ...draft, frame: site.frame }

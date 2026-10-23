@@ -8,10 +8,10 @@
     BASEMAP_START_ZOOM,
     BASEMAP_TILE_URL,
   } from '../browser/basemap'
-  import type { Place } from '../core/geocoding'
+  import type { Candidate } from '../core/geocoding'
 
   /**
-   * Confirming the place, on the coarse tiles.
+   * Confirming the candidate, on the coarse tiles.
    *
    * The first tier of the creator flow (ADR 0006): the tiles find the space, and
    * they are useless for drawing its edges because their cache stops at about z16
@@ -24,14 +24,14 @@
    */
 
   interface Props {
-    place: Place
-    /** The place is the right one: go and fetch the picture. */
+    candidate: Candidate
+    /** The candidate is the right one: go and fetch the picture. */
     onconfirm: () => void
     /** Back to the search. */
     onback: () => void
   }
 
-  let { place, onconfirm, onback }: Props = $props()
+  let { candidate, onconfirm, onback }: Props = $props()
 
   let element: HTMLDivElement
 
@@ -46,9 +46,9 @@
       maxZoom: BASEMAP_MAX_ZOOM,
     }).addTo(created)
 
-    // The place found, as a point rather than a marker pin: this is a spot on
+    // The candidate found, as a point rather than a marker pin: this is a spot on
     // the ground, not a destination on a road map.
-    L.circleMarker([place.position.latitude, place.position.longitude], {
+    L.circleMarker([candidate.position.latitude, candidate.position.longitude], {
       radius: 7,
       color: '#1b1b1b',
       weight: 2,
@@ -56,7 +56,7 @@
       fillOpacity: 1,
     }).addTo(created)
 
-    created.setView([place.position.latitude, place.position.longitude], BASEMAP_START_ZOOM)
+    created.setView([candidate.position.latitude, candidate.position.longitude], BASEMAP_START_ZOOM)
 
     return () => {
       created.remove()
@@ -66,8 +66,8 @@
 
 <section aria-label="Confirm the place">
   <p>
-    {place.name}{#if place.address !== undefined}
-      <span class="address">{place.address}</span>
+    {candidate.name}{#if candidate.address !== undefined}
+      <span class="address">{candidate.address}</span>
     {/if}
   </p>
   <p class="hint">

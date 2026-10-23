@@ -4,13 +4,19 @@
   import { loadAttribution } from '../browser/attribution'
   import { geocodingEffects } from '../browser/geocoder'
   import { imageryEffects } from '../browser/imagery-store'
-  import { workingFrame } from '../core/frame-sketch'
-  import { GEOCODING_IDLE, searchPlaces, type GeocodingState, type Place } from '../core/geocoding'
+  import {
+    findCandidates,
+    GEOCODING_IDLE,
+    type Candidate,
+    type GeocodingState,
+  } from '../core/geocoding'
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
     imageryPlanFor,
+    imageryPlanForExtent,
     loadImagery,
+    provisionalFetchArea,
     USGS_NAIP_SERVICE_URL,
     type ImageryPlan,
     type ImageryState,
@@ -29,13 +35,14 @@
   import PlaceSearch from './PlaceSearch.svelte'
 
   /**
-   * The hidden creator mode (ADR 0006): a place found by address, drawn over, and
-   * emitted as the entry to paste into the manifest.
+   * The hidden creator mode (ADR 0006): a candidate found by address, drawn over,
+   * and emitted as the entry to paste into the manifest.
    *
    * Three steps, and only one of them shows a picture. The address search and the
    * coarse tiles are cheap; the one high-resolution image is the 15-22 second
-   * wait, so it is fetched exactly once, for the working area the rectangle will
-   * be drawn inside, and never again while the rectangle is adjusted.
+   * wait, so it is fetched exactly once, for the provisional Fetch Area the
+   * rectangle will be drawn inside, and never again while the rectangle is
+   * adjusted.
    *
    * Nothing here writes anywhere. The output is text in a box, to be copied and
    * committed by hand, which is what keeps the manifest the single source of
@@ -119,12 +126,12 @@
 
   async function search(query: string): Promise<void> {
     searching = true
-    geocoding = await searchPlaces(query, geocodingEffects)
+    geocoding = await findCandidates(query, geocodingEffects)
     searching = false
   }
 
-  function choose(place: Place): void {
-    draft = { place }
+  function choose(candidate: Candidate): void {
+    draft = { candidate }
     step = 'confirm'
   }
 
@@ -159,7 +166,7 @@
       return
     }
 
-    draft = { ...draft, place: { ...draft.place, name } }
+    draft = { ...draft, candidate: { ...draft.candidate, name } }
   }
 
   function retry(): void {
@@ -182,11 +189,12 @@
   /**
    * Fetch the one picture, for the draft as it stands.
    *
-   * A new place has no frame yet, so the picture is planned for the working area
-   * (`frame-sketch.ts`) - the largest square whose extent still fits the
-   * service's pixel cap - and the creator draws inside it. A place being
-   * corrected has its frame already, so the picture is planned for exactly the
-   * extent a visitor would fetch, which is the one already in the cache.
+   * A brand-new place has no frame yet, so the picture is planned for the
+   * provisional Fetch Area (`imagery.ts`) - the largest square whose extent still
+   * fits the service's pixel cap - and the creator draws inside it. A Site being
+   * corrected has its frame already, or is one the visitor will fetch a default
+   * square for, so the picture is planned for exactly the extent a visitor would
+   * fetch, which is the one already in the cache.
    *
    * The picture is fetched through the same port and the same store the visitor
    * app uses, so the two share one cache rather than keeping a copy each.
@@ -216,21 +224,26 @@
 
   /** Everything about the picture that arithmetic decides, from the numbers the core owns. */
   function planFor(what: SiteDraft): ImageryPlan {
-    return imageryPlanFor(siteForThePicture(what), USGS_NAIP_SERVICE_URL)
+    const site = siteForThePicture(what)
+
+    // Nothing to plan a frame-shaped fetch from: the candidate is brand new, so
+    // the picture is for the provisional Fetch Area instead.
+    return site.frame === undefined && what.id === undefined
+      ? imageryPlanForExtent(site.origin, provisionalFetchArea(), USGS_NAIP_SERVICE_URL)
+      : imageryPlanFor(site, USGS_NAIP_SERVICE_URL)
   }
 
   function siteForThePicture(what: SiteDraft): Site {
     const base: Site = {
       id: what.id ?? 'draft',
-      name: what.place.name,
-      origin: what.place.position,
+      name: what.candidate.name,
+      origin: what.candidate.position,
     }
-    // A brand-new place is fetched for the working area; a place being corrected
-    // is fetched for exactly the frame it already has, so the visitor's cache
-    // entry is the one this shows.
-    const frame = what.frame ?? (what.id === undefined ? workingFrame() : undefined)
 
-    return frame === undefined ? base : { ...base, frame }
+    // A Site being corrected is fetched for exactly the frame it already has, so
+    // the visitor's cache entry is the one this shows. One with no frame is
+    // fetched for the same default square a visitor gets.
+    return what.frame === undefined ? base : { ...base, frame: what.frame }
   }
 
   function entryFor(what: SiteDraft): string {
@@ -287,7 +300,7 @@
       }}
     />
   {:else if step === 'confirm' && draft !== undefined}
-    <Basemap place={draft.place} onconfirm={confirmPlace} onback={startAgain} />
+    <Basemap candidate={draft.candidate} onconfirm={confirmPlace} onback={startAgain} />
   {:else if step === 'sketch' && draft !== undefined}
     {#if imagery.status === 'loading'}
       <!-- The same loading state the visitor app shows, because it is the same
@@ -306,7 +319,7 @@
       <label class="name">
         Site name
         <input
-          value={draft.place.name}
+          value={draft.candidate.name}
           oninput={(event) => {
             rename(event.currentTarget.value)
           }}
@@ -316,7 +329,7 @@
       <FrameSketch
         {plan}
         imageUrl={picture}
-        origin={draft.place.position}
+        origin={draft.candidate.position}
         frame={draft.frame}
         onframe={setFrame}
       />

@@ -12,6 +12,18 @@ _Avoid_: location, lot, parking lot
 The oriented rectangle marking a Site's working area and defining the axes its Placements snap to. A guide only — it never confines a Placement.
 _Avoid_: boundary, grid, bounding box
 
+**Fetch Area**:
+The ground a Site's picture is fetched for — its Site Frame plus the context margin, a default square when it has no frame, and, while a new Site is still being found, a provisional square sized to the imagery service's pixel cap.
+_Avoid_: working area, working frame, bounding box
+
+**Candidate**:
+A place the address search offered, before it becomes a Site — what to call it, where it is, and usually its full address. The creator confirms one and draws the Site Frame over it.
+_Avoid_: place, result, match
+
+**Creator mode**:
+The hidden flow that adds a Site to the manifest. It is reached only by the `#create` fragment, and is hidden rather than secret: a static app has nothing to check a key against, so it relies on no visitor being told the address.
+_Avoid_: admin, back office
+
 **Vehicle**:
 A named vehicle type with a width, a length and a colour. A single Vehicle may describe a combination, such as a pickup towing a trailer.
 _Avoid_: car, unit, asset

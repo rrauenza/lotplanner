@@ -1,23 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  DEFAULT_FRAME_SIDE_METRES,
-  frameFromCorners,
-  MINIMUM_FRAME_SIDE_METRES,
-  resizedFrame,
-  workingFrame,
-} from './frame-sketch'
-import { MAX_IMAGE_PIXELS, NATIVE_METRES_PER_PIXEL } from './imagery'
-import { CONTEXT_MARGIN_METRES, extentForSite, type Site } from './site'
+import { frameFromCorners, MINIMUM_FRAME_SIDE_METRES, resizedFrame } from './frame-sketch'
 import type { SiteFrame } from './geometry'
-
-const AT_ORIGIN = { latitude: 0, longitude: 0 }
-
-function siteWith(frame: SiteFrame | undefined): Site {
-  const base: Site = { id: 'draft', name: 'Draft', origin: AT_ORIGIN }
-
-  return frame === undefined ? base : { ...base, frame }
-}
 
 describe('frameFromCorners', () => {
   it('takes the drawn box as the rectangle, square to north', () => {
@@ -111,39 +95,5 @@ describe('resizedFrame', () => {
     expect(
       resizedFrame(square, { eastMetres: 0, northMetres: 0 }, { eastMetres: 0.5, northMetres: 50 }),
     ).toBeUndefined()
-  })
-})
-
-describe('workingFrame', () => {
-  it('is the largest square whose picture still fits the service cap at native resolution', () => {
-    const half = DEFAULT_FRAME_SIDE_METRES / 2 + CONTEXT_MARGIN_METRES
-
-    expect(half * 2).toBeCloseTo(MAX_IMAGE_PIXELS * NATIVE_METRES_PER_PIXEL, 6)
-  })
-
-  it('is centred on the place and square to north', () => {
-    expect(workingFrame()).toStrictEqual({
-      centre: { eastMetres: 0, northMetres: 0 },
-      lengthMetres: DEFAULT_FRAME_SIDE_METRES,
-      widthMetres: DEFAULT_FRAME_SIDE_METRES,
-      rotationDegrees: 0,
-    })
-  })
-
-  it('covers a lot drawn inside it, with the context margin to spare', () => {
-    // The fixture lot, turned to match: 137 m by 98 m, centred on the place.
-    const lot = resizedFrame(
-      { ...workingFrame(), rotationDegrees: 90 },
-      { eastMetres: -68.5, northMetres: -49 },
-      { eastMetres: 68.5, northMetres: 49 },
-    )
-
-    expect(lot).not.toBeUndefined()
-
-    const fetched = extentForSite(siteWith(workingFrame()))
-    const wanted = extentForSite(siteWith(lot))
-
-    expect(wanted.halfEastMetres).toBeLessThanOrEqual(fetched.halfEastMetres)
-    expect(wanted.halfNorthMetres).toBeLessThanOrEqual(fetched.halfNorthMetres)
   })
 })

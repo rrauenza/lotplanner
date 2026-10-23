@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   GEOCODING_IDLE,
-  placesFrom,
-  searchPlaces,
+  candidatesFrom,
+  findCandidates,
   type GeocodingEffects,
-  type Place,
+  type Candidate,
 } from './geocoding'
 
 /**
@@ -26,9 +26,9 @@ const ANSWER = [
   },
 ]
 
-describe('placesFrom', () => {
+describe('candidatesFrom', () => {
   it('reads a position out of strings or numbers alike', () => {
-    expect(placesFrom(ANSWER)).toStrictEqual([
+    expect(candidatesFrom(ANSWER)).toStrictEqual([
       {
         name: 'Applebee lot',
         address: 'Applebee lot, 10123 N Wolfe Rd, Cupertino, California, United States',
@@ -39,40 +39,40 @@ describe('placesFrom', () => {
         address: '1 Infinite Loop, Cupertino, California, United States',
         position: { latitude: 37.32, longitude: -122.03 },
       },
-    ] satisfies readonly Place[])
+    ] satisfies readonly Candidate[])
   })
 
   it('takes the first part of an address as the name when there is no short one', () => {
-    const [place] = placesFrom([
+    const [candidate] = candidatesFrom([
       { lat: '37.32', lon: '-122.03', display_name: 'A street, A town, A country' },
     ])
 
-    expect(place?.name).toBe('A street')
-    expect(place?.address).toBe('A street, A town, A country')
+    expect(candidate?.name).toBe('A street')
+    expect(candidate?.address).toBe('A street, A town, A country')
   })
 
-  it('lists a place with a name but no address, since only a Site needs no address', () => {
-    const place = placesFrom([{ lat: 1, lon: 2, name: 'Somewhere' }])[0]
+  it('lists a candidate with a name but no address, since only a Site needs no address', () => {
+    const candidate = candidatesFrom([{ lat: 1, lon: 2, name: 'Somewhere' }])[0]
 
-    expect(place).toStrictEqual({ name: 'Somewhere', position: { latitude: 1, longitude: 2 } })
+    expect(candidate).toStrictEqual({ name: 'Somewhere', position: { latitude: 1, longitude: 2 } })
   })
 
   it('answers an empty list when there is nothing in the answer', () => {
-    expect(placesFrom([])).toStrictEqual([])
+    expect(candidatesFrom([])).toStrictEqual([])
   })
 
   it('answers an empty list rather than failing on an answer that is not a list', () => {
-    expect(placesFrom(null)).toStrictEqual([])
-    expect(placesFrom({ error: 'no' })).toStrictEqual([])
-    expect(placesFrom('unexpected')).toStrictEqual([])
-    expect(placesFrom(undefined)).toStrictEqual([])
+    expect(candidatesFrom(null)).toStrictEqual([])
+    expect(candidatesFrom({ error: 'no' })).toStrictEqual([])
+    expect(candidatesFrom('unexpected')).toStrictEqual([])
+    expect(candidatesFrom(undefined)).toStrictEqual([])
   })
 
   it('drops a record it cannot place or cannot show, keeping the rest', () => {
     const usable = { lat: '1', lon: '2', display_name: 'Somewhere' }
 
     expect(
-      placesFrom([
+      candidatesFrom([
         'not a record',
         { lon: 2, display_name: 'no position' },
         { lat: 1, display_name: 'no longitude' },
@@ -111,16 +111,16 @@ class FakeGeocoder implements GeocodingEffects {
   }
 }
 
-describe('searchPlaces', () => {
+describe('findCandidates', () => {
   it('asks for what the creator typed, tidied', async () => {
     const geocoder = new FakeGeocoder(ANSWER)
 
-    const state = await searchPlaces('  Cupertino  ', geocoder)
+    const state = await findCandidates('  Cupertino  ', geocoder)
 
     expect(geocoder.asked).toStrictEqual(['Cupertino'])
     expect(state).toStrictEqual({
       status: 'found',
-      places: [
+      candidates: [
         {
           name: 'Applebee lot',
           address: 'Applebee lot, 10123 N Wolfe Rd, Cupertino, California, United States',
@@ -138,14 +138,14 @@ describe('searchPlaces', () => {
   it('does not spend a request on an address nobody typed', async () => {
     const geocoder = new FakeGeocoder(ANSWER)
 
-    expect(await searchPlaces('   ', geocoder)).toStrictEqual({ status: 'found', places: [] })
+    expect(await findCandidates('   ', geocoder)).toStrictEqual({ status: 'found', candidates: [] })
     expect(geocoder.asked).toStrictEqual([])
   })
 
   it('reports a search that found nothing as an answer, not a failure', async () => {
-    expect(await searchPlaces('Nowhere at all', new FakeGeocoder([]))).toStrictEqual({
+    expect(await findCandidates('Nowhere at all', new FakeGeocoder([]))).toStrictEqual({
       status: 'found',
-      places: [],
+      candidates: [],
     })
   })
 
@@ -153,16 +153,16 @@ describe('searchPlaces', () => {
     const geocoder = new FakeGeocoder(ANSWER)
     geocoder.fails = true
 
-    const state = await searchPlaces('Cupertino', geocoder)
+    const state = await findCandidates('Cupertino', geocoder)
 
     expect(state.status).toBe('failed')
     expect(state).toStrictEqual({ status: 'failed', message: 'The place search did not answer.' })
   })
 
   it('reports an answer it cannot read as finding nothing', async () => {
-    expect(await searchPlaces('Cupertino', new FakeGeocoder({ broken: true }))).toStrictEqual({
+    expect(await findCandidates('Cupertino', new FakeGeocoder({ broken: true }))).toStrictEqual({
       status: 'found',
-      places: [],
+      candidates: [],
     })
   })
 

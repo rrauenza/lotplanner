@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { GeocodingState, Place } from '../core/geocoding'
+  import type { Candidate, GeocodingState } from '../core/geocoding'
   import type { Site } from '../core/site'
 
   /**
-   * The creator's first step: find the place, or open one already in the list.
+   * The creator's first step: find the candidate, or open one already in the
+   * list.
    *
    * Search is submitted rather than run as the address is typed. That is partly
    * the geocoder's pace - about one request a second, which typing would outrun -
@@ -22,7 +23,7 @@
     /** The Sites already in the manifest, to correct rather than redraw. */
     existing: readonly Site[]
     onsearch: (query: string) => void
-    onchoose: (place: Place) => void
+    onchoose: (candidate: Candidate) => void
     onexisting: (site: Site) => void
   }
 
@@ -53,21 +54,21 @@
   {:else if geocoding.status === 'failed'}
     <p role="alert">{geocoding.message}</p>
   {:else if geocoding.status === 'found'}
-    {#if geocoding.places.length === 0}
+    {#if geocoding.candidates.length === 0}
       <p>Nothing matched that address.</p>
     {:else}
       <ul class="places">
-        {#each geocoding.places as place, index (index)}
+        {#each geocoding.candidates as candidate, index (index)}
           <li>
             <button
               type="button"
               onclick={() => {
-                onchoose(place)
+                onchoose(candidate)
               }}
             >
-              <span class="name">{place.name}</span>
-              {#if place.address !== undefined}
-                <span class="address">{place.address}</span>
+              <span class="name">{candidate.name}</span>
+              {#if candidate.address !== undefined}
+                <span class="address">{candidate.address}</span>
               {/if}
             </button>
           </li>

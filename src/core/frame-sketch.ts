@@ -1,6 +1,4 @@
 import { alongAndAcrossOf, type Offset, type SiteFrame } from './geometry'
-import { MAX_IMAGE_PIXELS, NATIVE_METRES_PER_PIXEL } from './imagery'
-import { CONTEXT_MARGIN_METRES } from './site'
 
 /**
  * The rectangle the creator draws over the imagery, as arithmetic rather than as
@@ -24,30 +22,6 @@ import { CONTEXT_MARGIN_METRES } from './site'
  * refused rather than recorded as a Site nothing can be laid in.
  */
 export const MINIMUM_FRAME_SIDE_METRES = 1
-
-/**
- * The working area a new Site is fetched for, before the creator has drawn one.
- *
- * A picture is fetched before anything can be drawn on it, so a brand-new place
- * needs a rectangle to plan its fetch even though it has no frame yet. This is
- * the largest square whose extent - itself plus the context margin - still fits
- * the imagery service's pixel cap at the imagery's own resolution, worked out
- * from the same two numbers the fetch itself uses rather than chosen by eye. A
- * drawn frame sits inside it, so the picture the creator drew on already covers
- * the frame plus the margin the visitors will see.
- */
-export const DEFAULT_FRAME_SIDE_METRES =
-  MAX_IMAGE_PIXELS * NATIVE_METRES_PER_PIXEL - 2 * CONTEXT_MARGIN_METRES
-
-/** The working area itself: square to north, centred on the place. */
-export function workingFrame(): SiteFrame {
-  return {
-    centre: { eastMetres: 0, northMetres: 0 },
-    lengthMetres: DEFAULT_FRAME_SIDE_METRES,
-    widthMetres: DEFAULT_FRAME_SIDE_METRES,
-    rotationDegrees: 0,
-  }
-}
 
 /**
  * The frame a corner-to-corner drag describes.

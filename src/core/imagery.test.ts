@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
+import { resizedFrame } from './frame-sketch'
 import {
   exportImageUrl,
   imageryPlanFor,
+  imageryPlanForExtent,
   imagerySize,
   loadImagery,
+  MAX_IMAGE_PIXELS,
+  NATIVE_METRES_PER_PIXEL,
+  PROVISIONAL_FETCH_AREA_SIDE_METRES,
+  provisionalFetchArea,
   type ImageryState,
 } from './imagery'
+import { CONTEXT_MARGIN_METRES, extentForSite } from './site'
 
 const SERVICE = 'https://imagery.example.test/USGSNAIPImagery/ImageServer'
 
@@ -128,6 +135,68 @@ describe('imageryPlanFor', () => {
     expect(plan.size.width).toBe(1457)
     expect(plan.size.height).toBe(1327)
     expect(plan.size.metresPerPixel).toBeCloseTo(0.3, 3)
+  })
+})
+
+describe('provisionalFetchArea', () => {
+  it('is the largest square the service will give at the imagery own resolution', () => {
+    const side = provisionalFetchArea().halfEastMetres * 2
+
+    expect(side).toBeCloseTo(MAX_IMAGE_PIXELS * NATIVE_METRES_PER_PIXEL, 6)
+  })
+
+  it('is centred on the candidate and square to north', () => {
+    const half = PROVISIONAL_FETCH_AREA_SIDE_METRES / 2
+
+    expect(provisionalFetchArea()).toStrictEqual({
+      centre: { eastMetres: 0, northMetres: 0 },
+      halfEastMetres: half,
+      halfNorthMetres: half,
+    })
+  })
+
+  it('plans a picture at the service pixel cap', () => {
+    const plan = imageryPlanForExtent(
+      { latitude: 0, longitude: 0 },
+      provisionalFetchArea(),
+      SERVICE,
+    )
+
+    expect(plan.size.width).toBe(4000)
+    expect(plan.size.height).toBe(4000)
+  })
+
+  it('covers a lot drawn inside it, with the context margin to spare', () => {
+    // The fixture lot, turned to match: 137 m by 98 m, centred on the candidate.
+    // The frame it is drawn from is the largest that still gets its margin.
+    const roomiest = PROVISIONAL_FETCH_AREA_SIDE_METRES - 2 * CONTEXT_MARGIN_METRES
+    const lot = resizedFrame(
+      {
+        centre: { eastMetres: 0, northMetres: 0 },
+        lengthMetres: roomiest,
+        widthMetres: roomiest,
+        rotationDegrees: 90,
+      },
+      { eastMetres: -68.5, northMetres: -49 },
+      { eastMetres: 68.5, northMetres: 49 },
+    )
+
+    expect(lot).not.toBeUndefined()
+
+    if (lot === undefined) {
+      throw new Error('expected a lot drawn inside the fetch area')
+    }
+
+    const fetched = provisionalFetchArea()
+    const wanted = extentForSite({
+      id: 'draft',
+      name: 'Draft',
+      origin: { latitude: 0, longitude: 0 },
+      frame: lot,
+    })
+
+    expect(wanted.halfEastMetres).toBeLessThanOrEqual(fetched.halfEastMetres)
+    expect(wanted.halfNorthMetres).toBeLessThanOrEqual(fetched.halfNorthMetres)
   })
 })
 
