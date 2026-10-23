@@ -57,7 +57,11 @@ async function savedRecord(page: Page): Promise<string | null> {
 async function savedLayouts(page: Page): Promise<unknown[]> {
   const record = await savedRecord(page)
 
-  return record === null ? [] : (JSON.parse(record) as unknown[])
+  if (record === null) {
+    return []
+  }
+
+  return (JSON.parse(record) as { layouts?: unknown[] }).layouts ?? []
 }
 
 /** A page at the fixture Site, ready to work on, in a context of its own. */
@@ -159,7 +163,8 @@ test("opening a shared link leaves the recipient's own saved work exactly as it 
   await expect(page.locator('path.placement')).toHaveCount(3)
   await page.waitForTimeout(700)
 
-  const originally = (JSON.parse(theirs ?? '[]') as unknown[])[0]
+  const originally =
+    (JSON.parse(theirs ?? '{}') as { layouts?: unknown[] }).layouts?.[0] ?? undefined
   const both = await savedLayouts(page)
 
   expect(both).toHaveLength(2)

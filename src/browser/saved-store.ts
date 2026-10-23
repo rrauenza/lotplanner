@@ -1,4 +1,4 @@
-import type { SavedEffects, SavedLayout } from '../core/saved'
+import type { SavedEffects, StoredWork } from '../core/saved'
 
 /**
  * Where a Site's saved work is kept between visits.
@@ -47,10 +47,11 @@ export function readSavedWork(siteId: string): Promise<unknown> {
  *
  * One record per Site rather than one per Layout, because the order of the list
  * is part of the work - it is what "the one I was just in" means - and a second
- * record holding that order could disagree with the first.
+ * record holding that order could disagree with the first. The record carries a
+ * version field (ADR 0008); what that version means is the core's business.
  */
-export function writeSavedWork(siteId: string, saved: readonly SavedLayout[]): Promise<void> {
-  localStorage.setItem(keyFor(siteId), JSON.stringify(saved))
+export function writeSavedWork(siteId: string, work: StoredWork): Promise<void> {
+  localStorage.setItem(keyFor(siteId), JSON.stringify(work))
 
   return Promise.resolve()
 }

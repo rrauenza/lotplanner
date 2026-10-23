@@ -152,14 +152,13 @@ test('imports a Layout file into a stranger, showing what the sender saw and kee
   // And, unlike a link, the file is kept: a named Layout for its Site.
   await recipient.waitForTimeout(700)
 
-  const layouts = JSON.parse((await savedRecord(recipient, 'cupertino-sample')) ?? '[]') as {
-    name: string
-    layout: { placements: unknown[] }
-  }[]
+  const record = JSON.parse((await savedRecord(recipient, 'cupertino-sample')) ?? '{}') as {
+    layouts: { name: string; layout: { placements: unknown[] } }[]
+  }
 
-  expect(layouts).toHaveLength(1)
-  expect(layouts[0]?.name).toBe('Layout 1')
-  expect(layouts[0]?.layout.placements).toHaveLength(2)
+  expect(record.layouts).toHaveLength(1)
+  expect(record.layouts[0]?.name).toBe('Layout 1')
+  expect(record.layouts[0]?.layout.placements).toHaveLength(2)
 
   await stranger.close()
 })
@@ -195,18 +194,19 @@ test('an imported Layout is added, and everything already saved is untouched', a
   await expect(page.locator('path.placement')).toHaveCount(2)
   await page.waitForTimeout(700)
 
-  const after = JSON.parse((await savedRecord(page, 'cupertino-sample')) ?? '[]') as {
-    name: string
-    layout: { placements: unknown[] }
-  }[]
+  const after = JSON.parse((await savedRecord(page, 'cupertino-sample')) ?? '{}') as {
+    layouts: { name: string; layout: { placements: unknown[] } }[]
+  }
 
-  expect(after).toHaveLength(2)
+  expect(after.layouts).toHaveLength(2)
   // The arrival is at the front, and its name is freed of the collision rather
   // than taking the one already here.
-  expect(after[0]?.name).toBe('Layout 1 (2)')
-  expect(after[0]?.layout.placements).toHaveLength(2)
+  expect(after.layouts[0]?.name).toBe('Layout 1 (2)')
+  expect(after.layouts[0]?.layout.placements).toHaveLength(2)
   // The proof: what was already here is byte for byte what it was.
-  expect(after[1]).toEqual((JSON.parse(before ?? '[]') as unknown[])[0])
+  expect(after.layouts[1]).toEqual(
+    (JSON.parse(before ?? '{}') as { layouts?: unknown[] }).layouts?.[0],
+  )
 })
 
 test('opens and keeps a Layout for a place the manifest has never heard of', async ({ page }) => {
@@ -237,12 +237,12 @@ test('opens and keeps a Layout for a place the manifest has never heard of', asy
 
   await page.waitForTimeout(700)
 
-  const layouts = JSON.parse((await savedRecord(page, 'somewhere-else')) ?? '[]') as {
-    name: string
-  }[]
+  const layouts = JSON.parse((await savedRecord(page, 'somewhere-else')) ?? '{}') as {
+    layouts: { name: string }[]
+  }
 
-  expect(layouts).toHaveLength(1)
-  expect(layouts[0]?.name).toBe('Their option')
+  expect(layouts.layouts).toHaveLength(1)
+  expect(layouts.layouts[0]?.name).toBe('Their option')
 })
 
 test('an imported Collection is a new collection, and never overwrites one', async ({

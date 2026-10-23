@@ -26,6 +26,28 @@ import { readVehicle } from './vehicle'
 export const MAXIMUM_LAYOUT_NAME_LENGTH = 48
 
 /**
+ * The shape this version of the app writes to storage.
+ *
+ * The record is versioned for the reason every artifact that leaves the app is
+ * (ADR 0009): a record found in the wild has to be identifiable before it can be
+ * migrated, and silently dropping what cannot be recognised would throw away
+ * somebody's work the day the shape changes. The Layouts inside an old record
+ * carry no version of their own, which is exactly what version 0 means here.
+ */
+export const SAVED_VERSION = 1
+
+/**
+ * A Site's work at rest: the record's own version, around the Layouts.
+ *
+ * Storage hands back plain data and does not interpret it; the version and the
+ * migration live in this module, so the adapter stays a string under a key.
+ */
+export interface StoredWork {
+  readonly version: number
+  readonly layouts: readonly SavedLayout[]
+}
+
+/**
  * Whether what is on screen will still be there tomorrow.
  *
  * Not a boolean, because the bad news is the whole point of it: the visitor is
@@ -56,7 +78,7 @@ export interface SavedLayout {
  */
 export interface SavedEffects {
   read(siteId: string): Promise<unknown>
-  write(siteId: string, saved: readonly SavedLayout[]): Promise<void>
+  write(siteId: string, work: StoredWork): Promise<void>
 }
 
 /** The Layouts saved for a Site, most recently worked on first. */
@@ -186,14 +208,38 @@ export function withImported(
  * of that may stop the app opening, so anything unreadable is dropped and the
  * rest is used - losing one Layout is bad, and refusing to start is worse.
  *
+ * Two shapes are read here. A bare list is the record before it was versioned -
+ * what this app wrote before ADR 0008's deferral was settled - and is read as
+ * version 0 so that work already in the wild keeps working. A numbered record is
+ * read only when it is this version: a record from a newer app is dropped rather
+ * than guessed at, and a numbered record this version does not know would be one
+ * whose migration has not been written. No migration has been needed yet, because
+ * version 1 is the first versioned shape.
+ *
  * This is also the one place where these values are built from nothing, so it
  * checks shapes rather than only casting: past here a Layout is a Layout.
  */
 export function readSaved(value: unknown): readonly SavedLayout[] {
-  if (!Array.isArray(value)) {
+  if (Array.isArray(value)) {
+    return readEntries(value)
+  }
+
+  if (!isRecord(value)) {
     return []
   }
 
+  const { version, layouts } = value
+
+  // Not guessed at: a record from a newer app may mean anything at all.
+  if (typeof version !== 'number' || version !== SAVED_VERSION) {
+    return []
+  }
+
+  return Array.isArray(layouts) ? readEntries(layouts) : []
+}
+
+/** The Layouts out of a list of entries, dropping whatever cannot be read. */
+function readEntries(value: readonly unknown[]): readonly SavedLayout[] {
   const readable: SavedLayout[] = []
 
   for (const entry of value) {
@@ -226,7 +272,10 @@ export async function writeSaved(
   effects: SavedEffects,
 ): Promise<Saving> {
   try {
-    await effects.write(siteId, saved)
+    // Wrapped with the record's version here rather than in the adapter, so that
+    // what storage holds is this module's business and the adapter stays a
+    // string under a key (ADR 0008).
+    await effects.write(siteId, { version: SAVED_VERSION, layouts: saved })
     return KEPT
   } catch {
     return { kept: false, message: NOTHING_KEPT }

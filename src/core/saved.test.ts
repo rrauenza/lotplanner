@@ -4,6 +4,7 @@ import {
   KEPT,
   MAXIMUM_LAYOUT_NAME_LENGTH,
   NOTHING_KEPT,
+  SAVED_VERSION,
   writeSaved,
   loadSaved,
   mostRecentOf,
@@ -16,6 +17,7 @@ import {
   withoutSaved,
   type SavedEffects,
   type SavedLayout,
+  type StoredWork,
 } from './saved'
 import { newLayout, withPlacement, type Layout, type Placement } from './layout'
 import type { Site } from './site'
@@ -76,7 +78,7 @@ class FakeStorage implements SavedEffects {
     return this.fails === 'read' ? Promise.reject(new Error('no')) : Promise.resolve(this.stored)
   }
 
-  write(_siteId: string, saved: readonly SavedLayout[]): Promise<void> {
+  write(_siteId: string, work: StoredWork): Promise<void> {
     this.writes += 1
 
     if (this.fails === 'write') {
@@ -85,7 +87,7 @@ class FakeStorage implements SavedEffects {
 
     // Through text, the way storage holds it: what comes back has to be plain
     // data rather than anything that only lived in this tab.
-    this.stored = JSON.parse(JSON.stringify(saved)) as unknown
+    this.stored = JSON.parse(JSON.stringify(work)) as unknown
 
     return Promise.resolve()
   }
@@ -278,6 +280,22 @@ describe('what storage gave back', () => {
     expect(saved.map((each) => each.name)).toEqual(['First'])
   })
 
+  it('reads a versioned record, and the unversioned list it replaced', () => {
+    // The shape this app writes now.
+    expect(readSaved({ version: SAVED_VERSION, layouts: [entry('a', 'First')] })).toEqual([
+      entry('a', 'First'),
+    ])
+
+    // The shape written before the record carried a version, read as version 0
+    // so work already in somebody's browser keeps working rather than being
+    // discarded the day the version was added.
+    expect(readSaved([entry('a', 'First')])).toEqual([entry('a', 'First')])
+  })
+
+  it('drops a record from a newer app rather than guessing at it', () => {
+    expect(readSaved({ version: SAVED_VERSION + 1, layouts: [entry('a', 'First')] })).toEqual([])
+  })
+
   it('reads nothing out of anything but a list', () => {
     expect(readSaved(undefined)).toEqual([])
     expect(readSaved({ layouts: [] })).toEqual([])
@@ -318,7 +336,10 @@ describe('reaching storage', () => {
 
     expect(saving).toBe(KEPT)
     expect(storage.writes).toBe(1)
-    expect(storage.stored).toEqual([entry('a', 'First')])
+    expect(storage.stored).toEqual({
+      version: SAVED_VERSION,
+      layouts: [entry('a', 'First')],
+    })
   })
 
   it('carries on in memory, and says so, when storage will not give anything', async () => {

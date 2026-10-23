@@ -56,14 +56,21 @@ other's name.
 - **Refusing to start, or failing silently, when storage is unavailable.** Rejected: silently losing
   someone's afternoon is the worst outcome available, and refusing to start over a cache is the
   second worst. The spec asks for neither.
-- **Versioning the stored record now.** Wanted eventually, and the codec will carry a version field
-  when a Layout has to travel (issue #13). Here it is not yet needed, because the reader validates
-  what it finds and drops what it cannot read, which is what a version would be protecting against.
+- **Versioning the stored record, deferred at first.** Now done: the record is
+  `{ version, layouts }`, and a bare list found in the wild is read as version 0 so that work already
+  in a browser survives. The earlier argument — that a reader which validates what it finds and drops
+  what it cannot read protects the same thing — was wrong in one respect. Validation drops what it
+  cannot recognise, so a future shape change would discard somebody's work rather than migrate it, and
+  an unversioned record cannot be told apart from corruption. That is the same reason ADR 0009 gives
+  for versioning anything that travels, and work at rest is no different.
 
 ## Consequences
 
 - Losing storage costs the work its future, not its present: the list, the naming and the editing
   all keep working for as long as the tab is open.
+- The stored record carries a version field, and the Layouts inside a record written before it did
+  are read as version 0. A record from a newer app is dropped rather than guessed at, which keeps the
+  app open rather than misreading somebody's work.
 - The list is held in the session and written behind, rather than read back on every change, so the
   interface never waits on storage to show what someone has just placed.
 - Work is keyed by Site, so a Site carries its own Layouts and nothing is shown against a place it
