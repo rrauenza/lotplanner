@@ -8,6 +8,7 @@
   import Collections from './components/Collections.svelte'
   import Layouts from './components/Layouts.svelte'
   import MapView from './components/MapView.svelte'
+  import Missing from './components/Missing.svelte'
   import Palette from './components/Palette.svelte'
   import Placed from './components/Placed.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
@@ -51,7 +52,9 @@
   import type { Vehicle } from './core/vehicle'
   import {
     SYSTEM_COLLECTION,
+    adopted,
     loadCollections,
+    missingFrom,
     nextCollectionName,
     withCreated,
     withEditedVehicle as withEditedVehicleInCollection,
@@ -120,6 +123,16 @@
 
   /** Whether the Collections sheet is up. */
   let collectionsUp = $state(false)
+
+  /**
+   * Whether the adoption offer has been put away for the Layout now open.
+   *
+   * A view of the session, like the chosen collection: nothing records it. It
+   * goes back to false whenever a Layout is opened, because opening one reports
+   * what is missing; an edit leaves it alone, so declining is a decision that
+   * stands until the next time the Layout is opened.
+   */
+  let adoptionDeclined = $state(false)
 
   /**
    * How see-through every placed vehicle is drawn.
@@ -334,6 +347,33 @@
     keepCollections(withoutVehicle(collections ?? [], id, removed))
   }
 
+  /**
+   * Take the open Layout's missing vehicles into one new collection.
+   *
+   * The vehicles become living copies of the visitor's own, and the Layout they
+   * came from is not touched: adopting is not a repair, because a Layout carries
+   * what it renders (ADR 0002). Choosing the new collection shows it in the
+   * palette at once, beside the name box it is renamed in.
+   */
+  function adoptMissing(): void {
+    const current = collections
+    const absent = missing
+
+    if (current === undefined || absent.length === 0) {
+      return
+    }
+
+    const made = adopted(current, absent, crypto.randomUUID())
+
+    keepCollections(withCreated(current, made))
+    chosenCollection = made.id
+  }
+
+  /** Put the offer away. The Layout renders and edits the same either way. */
+  function declineAdoption(): void {
+    adoptionDeclined = true
+  }
+
   function chooseCollection(id: string): void {
     chosenCollection = id
   }
@@ -380,6 +420,7 @@
 
     openId = opening?.id
     editor = startEditing(opening?.layout ?? newLayout(choice))
+    adoptionDeclined = false
   }
 
   /** Open one of the Site's saved Layouts. */
@@ -398,6 +439,7 @@
     savedLayouts = withSaved(savedLayouts, chosen)
     writeWhenSettled()
     editor = startEditing(chosen.layout)
+    adoptionDeclined = false
   }
 
   /** Start another Layout for this Site, leaving the saved ones where they are. */
@@ -412,6 +454,7 @@
     selectedId = undefined
     layoutsUp = false
     editor = startEditing(newLayout(current))
+    adoptionDeclined = false
   }
 
   /** Rename the open Layout. A name that is not a name leaves the old one. */
@@ -452,6 +495,7 @@
       openId = next?.id
       selectedId = undefined
       editor = startEditing(next?.layout ?? newLayout(current))
+      adoptionDeclined = false
       // The sheet goes with it: what it was showing is no longer there.
       layoutsUp = false
     }
@@ -472,6 +516,19 @@
    */
   const notice = $derived(
     saving.kept ? (collectionsSaving.kept ? undefined : collectionsSaving.message) : saving.message,
+  )
+
+  /**
+   * The open Layout's vehicles that are in none of the visitor's collections.
+   *
+   * The System Collection counts as one of the visitor's, so a vehicle dragged
+   * from the palette is never reported. What is reported is a Layout that arrived
+   * from somewhere else, or one whose vehicles were corrected until nothing here
+   * recognises them - and it is derived rather than remembered, so it goes the
+   * moment they are adopted.
+   */
+  const missing = $derived(
+    collections === undefined || layout === undefined ? [] : missingFrom(collections, layout),
   )
 
   function undoEdit(): void {
@@ -798,6 +855,12 @@
             <VehicleEditor of={selectedVehicle} onchange={correctVehicle} />
           </div>
         {/key}
+      {:else if missing.length > 0 && !adoptionDeclined}
+        <!-- What the Layout uses that the visitor does not have, over the
+             photograph for the same reason the other sheets are: opening it must
+             not resize the map, because the report is read against the ground it
+             is about. -->
+        <Missing {missing} onadopt={adoptMissing} ondecline={declineAdoption} />
       {/if}
     </div>
     <!-- Always reachable, and never inside the selection's sheet: undoing a

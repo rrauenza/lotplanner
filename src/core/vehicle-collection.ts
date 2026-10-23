@@ -1,4 +1,5 @@
 import { SYSTEM_COLLECTION_NAME, systemVehicles } from './collection'
+import { countsByVehicle, type Layout } from './layout'
 import { KEPT, type Saving } from './saved'
 import { tidy } from './text'
 import { readVehicle, sameVehicle, type Vehicle } from './vehicle'
@@ -122,13 +123,80 @@ export function received(
 ): VehicleCollection {
   const asArrived = tidy(arrived.name).slice(0, MAXIMUM_COLLECTION_NAME_LENGTH)
   const wanted = asArrived === '' ? RECEIVED_COLLECTION_NAME : asArrived
-  const name = freeName(wanted, [SYSTEM_COLLECTION, ...mine])
-
-  const forked: VehicleCollection = { id, name, vehicles: [...arrived.vehicles] }
+  const forked = forkedCollection(mine, wanted, arrived.vehicles, id)
 
   // Nothing to say about where it came from when it did not say: better a
   // collection with no provenance than one claiming a source that is blank.
   return asArrived === '' ? forked : { ...forked, source: asArrived }
+}
+
+/**
+ * A Collection of the visitor's own holding these Vehicles, under a free name.
+ *
+ * The fork both routes take - an arrival from a file or a link, and a Layout's
+ * vehicles promoted on request. It makes a new Collection every time and reads
+ * what the visitor has only for the names it has taken, which is what makes
+ * "never merges, never overwrites" structural rather than a rule to remember.
+ */
+function forkedCollection(
+  mine: readonly VehicleCollection[],
+  wanted: string,
+  vehicles: readonly Vehicle[],
+  id: string,
+): VehicleCollection {
+  return { id, name: freeName(wanted, [SYSTEM_COLLECTION, ...mine]), vehicles: [...vehicles] }
+}
+
+/**
+ * The Vehicles a Layout uses that are in none of the visitor's Collections.
+ *
+ * **By value, not by identity.** A Layout carries copies of its Vehicles
+ * (ADR 0002), and after a round trip through storage two of them are not even
+ * the same object, so comparing references would call every vehicle missing
+ * every time. The System Collection counts as one of the visitor's collections,
+ * because a vehicle dragged from the palette is never absent - which is what
+ * makes this report mean something rather than appear for every Layout.
+ *
+ * Listed once each, in the order the Layout first uses them, so "exactly which"
+ * is a set rather than one line per Placement.
+ */
+export function missingFrom(
+  mine: readonly VehicleCollection[],
+  layout: Layout,
+): readonly Vehicle[] {
+  const known = allCollections(mine).flatMap((each) => each.vehicles)
+  const missing: Vehicle[] = []
+
+  // Counted from the Placements, which is what is drawn: a corrected vehicle is
+  // a value no collection holds, and it is still standing on the ground.
+  for (const { vehicle: used } of countsByVehicle(layout.placements)) {
+    if (!known.some((one) => sameVehicle(one, used))) {
+      missing.push(used)
+    }
+  }
+
+  return missing
+}
+
+/**
+ * The missing Vehicles adopted into a **new** Collection of the visitor's own.
+ *
+ * A fork, exactly as an import is: the vehicles go into a Collection that did
+ * not exist a moment ago, and nothing the visitor already has is merged into or
+ * overwritten (ADR 0002). The copies are taken as they are, which is the point -
+ * a Layout's copy is frozen and may differ from anything in a Collection, so
+ * what is adopted is what the Layout renders.
+ *
+ * Named by `nextCollectionName` because the core cannot know what a fleet is
+ * for, and the visitor renames it as soon as it appears. There is no provenance,
+ * because no one sent it: it came off the ground in front of them.
+ */
+export function adopted(
+  mine: readonly VehicleCollection[],
+  vehicles: readonly Vehicle[],
+  id: string,
+): VehicleCollection {
+  return forkedCollection(mine, nextCollectionName(mine), vehicles, id)
 }
 
 /**

@@ -9,9 +9,11 @@ import {
   MAXIMUM_COLLECTION_NAME_LENGTH,
   SYSTEM_COLLECTION,
   SYSTEM_COLLECTION_ID,
+  adopted,
   allCollections,
   contentHash,
   loadCollections,
+  missingFrom,
   nameFor,
   nextCollectionName,
   readCollections,
@@ -68,8 +70,40 @@ const COACH = vehicle({
 
 const ARRIVED: ArrivedCollection = { name: 'Fleet A', vehicles: [SUV, COACH] }
 
+/** The visitor's own vehicle: in no collection that ships with the app. */
+const TOW_TRUCK = vehicle({
+  name: 'Tow truck',
+  shortLabel: 'Tow',
+  widthInches: 96,
+  lengthInches: 240,
+  colour: '#6b7280',
+})
+
+/** A second one of the visitor's own, so a report has two things to tell apart. */
+const BOX_VAN = vehicle({
+  name: 'Box van',
+  shortLabel: 'Box van',
+  widthInches: 90,
+  lengthInches: 300,
+  colour: '#f59e0b',
+})
+
 function mine(id: string, name: string, vehicles: readonly Vehicle[] = []): VehicleCollection {
   return { id, name, vehicles }
+}
+
+/** A Layout at the fixture Site with these Vehicles placed, one copy each. */
+function laidWith(...used: readonly Vehicle[]): Layout {
+  return used.reduce<Layout>(
+    (layout, one, index) =>
+      withPlacement(layout, {
+        id: `p${String(index)}`,
+        vehicle: one,
+        centre: { eastMetres: index, northMetres: 0 },
+        rotationDegrees: 0,
+      }),
+    newLayout(SITE),
+  )
 }
 
 /** The name a typed name comes back as, or a failure naming what was wrong. */
@@ -251,6 +285,86 @@ describe('importing a collection, which is always a fork', () => {
 
     expect(back?.vehicles).toEqual([COACH, COACH])
     expect(ARRIVED.vehicles).toEqual([SUV, COACH])
+  })
+})
+
+describe("which of a Layout's vehicles are absent", () => {
+  it('counts the System Collection, so a vehicle dragged from the palette is never missing', () => {
+    expect(missingFrom([], laidWith(SUV, COACH))).toEqual([])
+  })
+
+  it('finds nothing missing in a Layout with nothing on it', () => {
+    expect(missingFrom([], newLayout(SITE))).toEqual([])
+  })
+
+  it('names exactly the vehicles that are in none of the collections', () => {
+    const collections = [mine('m', 'Mine', [TOW_TRUCK])]
+
+    expect(missingFrom(collections, laidWith(SUV, TOW_TRUCK, BOX_VAN))).toEqual([BOX_VAN])
+  })
+
+  it("counts the visitor's own collections as well as the System Collection", () => {
+    expect(missingFrom([mine('m', 'Mine', [BOX_VAN])], laidWith(BOX_VAN))).toEqual([])
+  })
+
+  it('compares by value, so a copy that came back from storage is the same vehicle', () => {
+    // A Layout carries copies (ADR 0002), and a trip through storage leaves two
+    // equal vehicles that are not the same object. A report by reference would
+    // call every vehicle missing, every time.
+    const stored = JSON.parse(JSON.stringify(BOX_VAN)) as Vehicle
+
+    expect(missingFrom([mine('m', 'Mine', [stored])], laidWith(BOX_VAN))).toEqual([])
+  })
+
+  it('says one vehicle once, however many copies of it are placed', () => {
+    expect(missingFrom([], laidWith(BOX_VAN, BOX_VAN, BOX_VAN))).toEqual([BOX_VAN])
+  })
+
+  it('reports in the order the Layout first uses them', () => {
+    expect(missingFrom([], laidWith(BOX_VAN, TOW_TRUCK, BOX_VAN))).toEqual([BOX_VAN, TOW_TRUCK])
+  })
+})
+
+describe("adopting a Layout's missing vehicles", () => {
+  it('makes a new collection of exactly the missing vehicles, named for a new one', () => {
+    const collections = [mine('m', 'Mine', [TOW_TRUCK])]
+    const after = withCreated(collections, adopted(collections, [BOX_VAN], 'new-id'))
+
+    expect(after.map((each) => each.name)).toEqual(['Mine', 'Collection 1'])
+    expect(after[1]).toEqual({ id: 'new-id', name: 'Collection 1', vehicles: [BOX_VAN] })
+  })
+
+  it('names it past the names already taken', () => {
+    const collections = [mine('a', 'Collection 1'), mine('b', 'Collection 2')]
+
+    expect(adopted(collections, [BOX_VAN], 'new-id').name).toBe('Collection 3')
+  })
+
+  it('leaves every collection the visitor already has byte-identical', () => {
+    const collections = [mine('m', 'Mine', [TOW_TRUCK, COACH])]
+    const before = JSON.stringify(collections)
+
+    withCreated(collections, adopted(collections, [BOX_VAN], 'new-id'))
+
+    expect(JSON.stringify(collections)).toBe(before)
+  })
+
+  it('has nothing to say about where it came from, since no one sent it', () => {
+    // Provenance is a name somebody else's collection had. This one came off the
+    // ground in front of the visitor, so there is no sender to name.
+    expect(adopted([], [BOX_VAN], 'new-id').source).toBeUndefined()
+  })
+
+  it('makes the missing vehicles present, so there is nothing left to report', () => {
+    const collections = [mine('m', 'Mine', [TOW_TRUCK])]
+    const laid = laidWith(TOW_TRUCK, BOX_VAN)
+    const missing = missingFrom(collections, laid)
+
+    expect(missing).toEqual([BOX_VAN])
+
+    const after = withCreated(collections, adopted(collections, missing, 'new-id'))
+
+    expect(missingFrom(after, laid)).toEqual([])
   })
 })
 
