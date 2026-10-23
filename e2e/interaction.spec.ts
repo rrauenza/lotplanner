@@ -209,3 +209,63 @@ test('picks a small vehicle up with a long press, and lets a jittery tap alone',
   const carried = await boxOf(page, 'path.placement')
   expect(Math.abs(carried.x - before.x)).toBeGreaterThan(4)
 })
+
+test('freezes every vehicle with the lock, so every gesture pans the picture', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drop = await middleOfTheMap(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  // The lock is the button that says what it does, and which way it is now.
+  const lock = page.getByRole('button', { name: 'Lock vehicles' })
+  await expect(lock).toHaveAttribute('aria-pressed', 'false')
+  await lock.click()
+
+  // A freed vehicle is not selected, and its own controls go with the
+  // selection: reviewing a finished layout should not have a handle on it.
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'The selected vehicle' })).toHaveCount(0)
+  await expect(lock).toHaveAttribute('aria-pressed', 'true')
+
+  const pictureBefore = await pictureBox(page)
+  const vehicleBefore = await boxOf(page, 'path.placement')
+  const grab = middleOf(vehicleBefore)
+
+  // A drag beginning on a vehicle pans, because the lock makes it ground rather
+  // than something to pick up.
+  await touchDrag(page, grab, { x: grab.x + 90, y: grab.y - 40 }, 10)
+
+  const pictureAfter = await pictureBox(page)
+  const vehicleAfter = await boxOf(page, 'path.placement')
+
+  expect(Math.abs(pictureAfter.x - pictureBefore.x)).toBeGreaterThan(20)
+  // The vehicle moved with the picture and not over it: same delta, no edit.
+  expect(Math.abs(vehicleAfter.x - vehicleBefore.x - (pictureAfter.x - pictureBefore.x))).toBeLessThan(1)
+  expect(Math.abs(vehicleAfter.y - vehicleBefore.y - (pictureAfter.y - pictureBefore.y))).toBeLessThan(1)
+  await expect(page.locator('path.placement.selected')).toHaveCount(0)
+
+  // Unlocked, the same press moves the vehicle rather than the picture.
+  await lock.click()
+  await expect(lock).toHaveAttribute('aria-pressed', 'false')
+
+  // A pan flicked with the finger keeps gliding for a moment, so let it settle
+  // before the picture is used as the thing that does not move.
+  await page.waitForTimeout(500)
+
+  const still = await pictureBox(page)
+  const again = middleOf(await boxOf(page, 'path.placement'))
+  await touchDrag(page, again, { x: again.x + 70, y: again.y }, 8)
+
+  const moved = await boxOf(page, 'path.placement')
+  const after = await pictureBox(page)
+
+  // The vehicle went with the finger, and the picture did not move under it.
+  expect(Math.abs(middleOf(moved).x - again.x)).toBeGreaterThan(50)
+  expect(Math.abs(after.x - still.x)).toBeLessThan(2)
+  await expect(page.locator('path.placement.selected')).toHaveCount(1)
+})

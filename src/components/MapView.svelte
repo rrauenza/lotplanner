@@ -1,6 +1,8 @@
 <script lang="ts">
   import L from 'leaflet'
 
+  import { untrack } from 'svelte'
+
   import {
     bearingBetween,
     containsPoint,
@@ -83,6 +85,12 @@
      * kept with a Layout.
      */
     opacity: number
+    /**
+     * Whether every vehicle is frozen, so that every gesture pans the map. A
+     * view of the session rather than part of the work, which is why it arrives
+     * here rather than being kept with a Layout.
+     */
+    locked: boolean
     onselect: (id: string | undefined) => void
     onmove: (id: string, centre: Offset) => void
     onrotate: (id: string, rotationDegrees: number) => void
@@ -96,6 +104,7 @@
     placements,
     selectedId,
     opacity,
+    locked,
     onselect,
     onmove,
     onrotate,
@@ -209,6 +218,12 @@
   function pressed(event: PointerEvent): void {
     const current = surface
     if (current === undefined) {
+      return
+    }
+
+    // Locked: no gesture belongs to a vehicle, so every one of them is the
+    // map's - a drag that begins on a vehicle pans it like any other.
+    if (locked) {
       return
     }
 
@@ -513,29 +528,42 @@
   }
 
   $effect(() => {
-    const created = imageryMap(element, plan, imageUrl, origin, { doubleTapZoom: false })
+    // Built once for this picture, and deliberately not rebuilt when an edit
+    // changes the Layout.
+    //
+    // A Layout is a fresh object on every edit - a moved Placement makes a new
+    // one - so a tracked read of these props recreates the whole map and
+    // re-fits the view on every drag, and the ground jumps back to the frame
+    // under the finger. One component is mounted per picture (choosing a place
+    // goes through the loading state, which takes the map down), so none of
+    // these four values changes underneath it.
+    const created = untrack(() => {
+      const map = imageryMap(element, plan, imageUrl, origin, { doubleTapZoom: false })
 
-    if (frame === undefined) {
-      created.map.fitBounds(toBounds(plan.bounds))
-    } else {
-      // A guide and never a limit, which is why it is drawn as an outline rather
-      // than as a mask over everything outside it.
-      const guide = L.polygon(
-        cornersOf(frame).map((corner) => toTuple(latLngFromOffset(origin, corner))),
-        {
-          className: 'frame-guide',
-          color: '#ffd166',
-          weight: 2,
-          dashArray: '6 4',
-          fill: false,
-          interactive: false,
-        },
-      ).addTo(created.map)
+      if (frame === undefined) {
+        map.map.fitBounds(toBounds(plan.bounds))
+      } else {
+        // A guide and never a limit, which is why it is drawn as an outline
+        // rather than as a mask over everything outside it.
+        const guide = L.polygon(
+          cornersOf(frame).map((corner) => toTuple(latLngFromOffset(origin, corner))),
+          {
+            className: 'frame-guide',
+            color: '#ffd166',
+            weight: 2,
+            dashArray: '6 4',
+            fill: false,
+            interactive: false,
+          },
+        ).addTo(map.map)
 
-      created.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
-    }
+        map.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
+      }
 
-    surface = created
+      surface = map
+
+      return map
+    })
 
     return () => {
       surface = undefined
@@ -550,7 +578,9 @@
     }
 
     const into = current.layers
-    const chosen = selectedId
+    // Nothing is selected while locked: the handle belongs to a selection, and
+    // a lock means there is nothing to take hold of.
+    const chosen = locked ? undefined : selectedId
     const carried = dragged
     const spun = turned
     const held = pickedUp && moving !== undefined ? moving.id : undefined
@@ -599,6 +629,20 @@
     return () => {
       current.map.off('zoomend', drawAll)
     }
+  })
+
+  $effect(() => {
+    if (!locked) {
+      return
+    }
+
+    // A lock arriving mid-gesture ends it, so that from the moment it is on,
+    // every finger pans. Read untracked: what is in flight is not a reason for
+    // this to run again.
+    untrack(() => {
+      stopMoving()
+      stopTurning()
+    })
   })
 </script>
 

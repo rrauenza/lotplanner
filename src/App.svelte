@@ -94,6 +94,15 @@
   let opacity = $state(0.4)
 
   /**
+   * Whether every vehicle is frozen, so that every gesture pans the picture.
+   *
+   * A view of this session like the opacity, and not part of the work: nothing
+   * records it, a reload starts unlocked, and nothing about it is written into a
+   * Layout (ADR 0008). It is not an edit either, so undo does not reach it.
+   */
+  let locked = $state(false)
+
+  /**
    * How long edits settle before the Site's work is written. Long enough that
    * typing a name into the form is one write rather than one per keystroke,
    * short enough that a phone call arriving costs nothing worth noticing.
@@ -467,6 +476,21 @@
     opacity = next
   }
 
+  /**
+   * Freeze every vehicle, or let them go again.
+   *
+   * Locking lets go of the selection: a handle and a form are things to touch,
+   * and a lock means touching does not move anything. Not `change`: nothing
+   * about the Layout moves, so there is nothing for undo to reverse.
+   */
+  function toggleLock(): void {
+    locked = !locked
+
+    if (locked) {
+      selectedId = undefined
+    }
+  }
+
   function movePlacement(id: string, centre: Offset): void {
     if (layout !== undefined) {
       change(withMovedPlacement(layout, id, centre))
@@ -586,6 +610,7 @@
         placements={layout.placements}
         {selectedId}
         {opacity}
+        {locked}
         onselect={selectPlacement}
         onmove={movePlacement}
         onrotate={rotatePlacement}
@@ -653,6 +678,19 @@
         </button>
         <button type="button" title="Ctrl, Shift and Z" disabled={!redoable} onclick={redoEdit}>
           Redo
+        </button>
+        <!-- Freezes the vehicles so that every gesture pans the picture, for
+             reviewing what is finished and for moving the view while placing
+             many. A view of the session rather than part of the work, so it is
+             not named for a Layout and not saved. -->
+        <button
+          type="button"
+          aria-pressed={locked}
+          aria-label="Lock vehicles"
+          title="Freeze the vehicles so every gesture pans"
+          onclick={toggleLock}
+        >
+          {locked ? 'Locked' : 'Lock'}
         </button>
       </div>
       <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
