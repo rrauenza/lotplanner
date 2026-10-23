@@ -92,7 +92,7 @@ export async function serveGeocoder(page: Page, records: readonly unknown[]): Pr
 export async function serveTiles(page: Page): Promise<string[]> {
   const requests: string[] = []
 
-  await page.route('**/tile.openstreetmap.org/**', async (route) => {
+  await page.route('**/basemap.nationalmap.gov/**', async (route) => {
     requests.push(route.request().url())
     await route.fulfill({ status: 200, contentType: 'image/png', body: PIXEL })
   })

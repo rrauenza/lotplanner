@@ -20,7 +20,7 @@
    * high-resolution image that comes next. The browser's own cache is the cache;
    * the app keeps no picture of its own for this tier.
    *
-   * The tiles are OpenStreetMap's, keyless, and credited the way they ask.
+   * The tiles are USGS's, keyless like the imagery, and credited anyway.
    */
 
   interface Props {
