@@ -265,12 +265,12 @@ test('offers a shared Collection, and opening it changes nothing', async ({ page
 
   // The recipient already has a collection of their own, put there as a browser
   // would hold one. Opening a link must not change it.
-  await page.evaluate(() =>
+  await page.evaluate(() => {
     localStorage.setItem(
       'lotplanner:collections',
       JSON.stringify([{ id: 'mine', name: 'Mine', vehicles: [] }]),
-    ),
-  )
+    )
+  })
   const before = await collectionsRecord(page)
 
   const link = await collectionLink({
@@ -297,12 +297,12 @@ test('keeps a shared Collection only when asked, as a fork', async ({ page }) =>
   await serveImagery(page)
   await page.goto('./')
 
-  await page.evaluate(() =>
+  await page.evaluate(() => {
     localStorage.setItem(
       'lotplanner:collections',
       JSON.stringify([{ id: 'mine', name: 'Mine', vehicles: [] }]),
-    ),
-  )
+    )
+  })
 
   const link = await collectionLink({
     name: 'Fleet A',
