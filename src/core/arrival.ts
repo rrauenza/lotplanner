@@ -22,7 +22,7 @@ export type Arrival =
 
 /** Said when a link carries something this screen has no way to show yet. */
 export const COLLECTION_NOT_OPENED =
-  'This link carries a Vehicle Collection. A Collection is shared as a file, which this screen cannot open yet.'
+  'This link carries a Vehicle Collection. Opening a Collection is not part of this screen yet.'
 
 /** What a page load turned out to be. */
 export async function arrivalFrom(

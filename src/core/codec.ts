@@ -13,11 +13,11 @@ import type { ArrivedCollection } from './vehicle-collection'
  *
  * The spelling is deliberately hostile to a reader's eyes and kind to a link's
  * budget: arrays rather than objects, so no field name is paid for, and every
- * position is quantised to the centimetre, which is a tenth of the ground one
- * imagery pixel covers at the sharpest zoom a Site opens at. A Layout is a plan
- * of where vehicles go, not a survey, and the quantisation costs nothing anyone
- * can see while roughly halving the link. Rotations are quantised to a tenth of
- * a degree for the same reason.
+ * position is quantised to the centimetre - far below the ground one imagery
+ * pixel covers at the sharpest zoom a Site opens at. A Layout is a plan of where
+ * vehicles go, not a survey, and the quantisation costs nothing anyone can see
+ * while roughly halving the link. Rotations are quantised to a tenth of a degree
+ * for the same reason.
  *
  * **The one decision that cannot be retrofitted is the version field**, because
  * a shape in the wild with no version cannot be identified as anything. Every
@@ -74,7 +74,10 @@ export type Migration = (fields: readonly unknown[]) => readonly unknown[]
 /** No migration is needed yet: this is the first shape that has ever travelled. */
 export const CODEC_MIGRATIONS: readonly Migration[] = []
 
-/** How a reader is set up. Only the id maker is required, and even that has a default. */
+/**
+ * How a reader is set up. Both are optional: with nothing given, no migration is
+ * run and the reader names its own Placements.
+ */
 export interface Reading {
   readonly migrations?: readonly Migration[]
   /**
