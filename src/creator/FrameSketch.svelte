@@ -1,20 +1,16 @@
 <script lang="ts">
   import L from 'leaflet'
-  import 'leaflet/dist/leaflet.css'
   import { untrack } from 'svelte'
 
-  import { isDragStart, type Point } from '../components/pointer'
+  import { imageryMap, toBounds, toTuple, type ImageryMap } from '../components/imagery-map'
   import { frameFromCorners, resizedFrame } from '../core/frame-sketch'
   import {
     bearingBetween,
     containsPoint,
     cornersOf,
     latLngFromOffset,
-    metresPerPixel,
-    offsetFromLatLng,
     orientation,
     type LatLng,
-    type LatLngBounds,
     type Offset,
     type SiteFrame,
   } from '../core/geometry'
@@ -69,8 +65,7 @@
 
   let element: HTMLDivElement
 
-  let map = $state.raw<L.Map | undefined>(undefined)
-  let shapes = $state.raw<L.LayerGroup | undefined>(undefined)
+  let surface = $state.raw<ImageryMap | undefined>(undefined)
 
   /** Whether a drag draws a fresh rectangle rather than takes hold of the old one. */
   let drawing = $state(untrack(() => frame === undefined))
@@ -89,61 +84,9 @@
   /** The rectangle to draw: the one in flight while there is one, the settled one otherwise. */
   const shown = $derived(live ?? frame)
 
-  function toTuple(point: LatLng): L.LatLngTuple {
-    return [point.latitude, point.longitude]
-  }
-
-  function toBounds(bounds: LatLngBounds): L.LatLngBounds {
-    return L.latLngBounds(toTuple(bounds.southWest), toTuple(bounds.northEast))
-  }
-
-  /** Where a point on the screen is on the ground, or nothing when it is off the map. */
-  function offsetAt(point: Point): Offset | undefined {
-    const current = map
-    if (current === undefined) {
-      return undefined
-    }
-
-    const rect = element.getBoundingClientRect()
-    if (
-      point.x < rect.left ||
-      point.x > rect.right ||
-      point.y < rect.top ||
-      point.y > rect.bottom
-    ) {
-      return undefined
-    }
-
-    const onTheGround = current.containerPointToLatLng(
-      L.point(point.x - rect.left, point.y - rect.top),
-    )
-
-    return offsetFromLatLng(origin, {
-      latitude: onTheGround.lat,
-      longitude: onTheGround.lng,
-    })
-  }
-
-  /** A press in the coordinates Leaflet works in, so a handle can be hit-tested. */
-  function containerAt(event: PointerEvent): L.Point {
-    const rect = element.getBoundingClientRect()
-
-    return L.point(event.clientX - rect.left, event.clientY - rect.top)
-  }
-
-  /** The ground padding the frame is grabbed within, in metres at this zoom. */
-  function hitPaddingMetres(): number {
-    const current = map
-    if (current === undefined) {
-      return 0
-    }
-
-    return FRAME_HIT_PADDING_PIXELS * metresPerPixel(current.getCenter().lat, current.getZoom())
-  }
-
   /** Where the turning handle sits: a fixed number of pixels past the rectangle's end. */
   function rotationPoint(figure: SiteFrame): L.Point | undefined {
-    const current = map
+    const current = surface
     if (current === undefined) {
       return undefined
     }
@@ -160,7 +103,7 @@
     }
 
     const toScreen = (corner: Offset): L.Point =>
-      current.latLngToContainerPoint(toTuple(latLngFromOffset(origin, corner)))
+      current.map.latLngToContainerPoint(toTuple(latLngFromOffset(origin, corner)))
 
     // The corners arrive walking the perimeter, so the first pair is the far end
     // and the second is the near end. Turning is measured from the middle out.
@@ -184,7 +127,7 @@
     figure: SiteFrame,
     point: L.Point,
   ): { readonly corner: Offset; readonly held: Offset } | undefined {
-    const current = map
+    const current = surface
     if (current === undefined) {
       return undefined
     }
@@ -192,7 +135,7 @@
     const corners = cornersOf(figure)
 
     for (const [index, corner] of corners.entries()) {
-      const onScreen = current.latLngToContainerPoint(toTuple(latLngFromOffset(origin, corner)))
+      const onScreen = current.map.latLngToContainerPoint(toTuple(latLngFromOffset(origin, corner)))
 
       if (point.distanceTo(onScreen) <= HANDLE_HIT_PIXELS) {
         const held = corners[(index + 2) % corners.length]
@@ -207,7 +150,7 @@
   }
 
   function pressed(event: PointerEvent): void {
-    const current = map
+    const current = surface
     if (current === undefined) {
       return
     }
@@ -215,15 +158,11 @@
     // A second finger is someone pinching, not a second gesture: the drag is
     // abandoned and the map gets both fingers, which is the way to inspect the
     // picture without touching the rectangle.
-    if (!event.isPrimary) {
-      abandon(current)
-      return
-    }
-    if (!isDragStart(event)) {
+    if (!current.beginsGesture(event, () => abandon())) {
       return
     }
 
-    const here = offsetAt({ x: event.clientX, y: event.clientY })
+    const here = current.offsetAt({ x: event.clientX, y: event.clientY })
     if (here === undefined) {
       return
     }
@@ -233,18 +172,18 @@
     // With nothing to take hold of yet, any drag draws a rectangle.
     if (drawing || figure === undefined) {
       gesture = { kind: 'draw', from: here }
-      current.dragging.disable()
+      current.stopPanning()
       return
     }
 
-    const at = containerAt(event)
+    const at = current.containerAt(event)
     const turn = rotationPoint(figure)
 
     if (turn !== undefined && at.distanceTo(turn) <= HANDLE_HIT_PIXELS) {
       // The grip is where the handle was taken hold of, relative to the
       // rectangle's own angle, so turning does not jump under the finger.
       gesture = { kind: 'turn', grip: bearingBetween(figure.centre, here) - figure.rotationDegrees }
-      current.dragging.disable()
+      current.stopPanning()
       return
     }
 
@@ -252,11 +191,11 @@
 
     if (corner !== undefined) {
       gesture = { kind: 'resize', held: corner.held }
-      current.dragging.disable()
+      current.stopPanning()
       return
     }
 
-    if (containsPoint(figure, here, hitPaddingMetres())) {
+    if (containsPoint(figure, here, current.metresForPixels(FRAME_HIT_PADDING_PIXELS))) {
       gesture = {
         kind: 'move',
         grab: {
@@ -264,7 +203,7 @@
           northMetres: figure.centre.northMetres - here.northMetres,
         },
       }
-      current.dragging.disable()
+      current.stopPanning()
       return
     }
 
@@ -278,7 +217,12 @@
       return
     }
 
-    const here = offsetAt({ x: event.clientX, y: event.clientY })
+    const current = surface
+    if (current === undefined) {
+      return
+    }
+
+    const here = current.offsetAt({ x: event.clientX, y: event.clientY })
     if (here === undefined) {
       return
     }
@@ -323,7 +267,7 @@
 
     gesture = undefined
     live = undefined
-    map?.dragging.enable()
+    surface?.allowPanning()
 
     if (settled === undefined || acting === undefined) {
       return
@@ -336,13 +280,13 @@
   }
 
   function cancelled(): void {
-    abandon(map)
+    abandon()
   }
 
-  function abandon(current: L.Map | undefined): void {
+  function abandon(): void {
     gesture = undefined
     live = undefined
-    current?.dragging.enable()
+    surface?.allowPanning()
   }
 
   /** Draw a fresh rectangle, throwing the old one away if there was one. */
@@ -367,36 +311,27 @@
   }
 
   $effect(() => {
-    const created = L.map(element, {
-      // The plane the imagery is fetched in, so the picture is never stretched.
-      crs: L.CRS.EPSG3857,
-      attributionControl: false,
-      // So the picture can sit exactly in the view rather than near it.
-      zoomSnap: 0,
-      maxZoom: plan.maxZoom,
-    })
+    const created = imageryMap(element, plan, imageUrl, origin)
 
-    L.imageOverlay(imageUrl, toBounds(plan.bounds)).addTo(created)
-    created.fitBounds(toBounds(plan.bounds), { padding: [24, 24] })
+    created.map.fitBounds(toBounds(plan.bounds), { padding: [24, 24] })
 
-    shapes = L.layerGroup().addTo(created)
-    map = created
+    surface = created
 
     return () => {
-      map = undefined
-      shapes = undefined
-      created.remove()
+      surface = undefined
+      created.destroy()
     }
   })
 
   $effect(() => {
-    const current = map
-    const into = shapes
+    const current = surface
     const figure = shown
 
-    if (current === undefined || into === undefined) {
+    if (current === undefined) {
       return
     }
+
+    const into = current.layers
 
     into.clearLayers()
 
@@ -436,7 +371,7 @@
 
     const turn = rotationPoint(figure)
     if (turn !== undefined) {
-      L.marker(current.containerPointToLatLng(turn), {
+      L.marker(current.map.containerPointToLatLng(turn), {
         icon: L.divIcon({
           className: 'frame-turn',
           html: knob('turn'),

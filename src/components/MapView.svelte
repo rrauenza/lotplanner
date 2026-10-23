@@ -1,16 +1,12 @@
 <script lang="ts">
   import L from 'leaflet'
-  import 'leaflet/dist/leaflet.css'
 
   import {
     bearingBetween,
     containsPoint,
     cornersOf,
     latLngFromOffset,
-    metresPerPixel,
-    offsetFromLatLng,
     type LatLng,
-    type LatLngBounds,
     type Offset,
     type SiteFrame,
   } from '../core/geometry'
@@ -19,7 +15,8 @@
   import { overlappingIds, rectangleOf, type Placement } from '../core/layout'
   import { cssColour } from '../core/colour'
   import { snapAngle, snapCandidates } from '../core/snapping'
-  import { isDragStart, type Point } from './pointer'
+  import { imageryMap, toBounds, toTuple, type ImageryMap } from './imagery-map'
+  import type { Point } from './pointer'
 
   /**
    * How far past a drawn vehicle a fingertip still counts as being on it, in
@@ -83,8 +80,7 @@
   // Held raw, so Leaflet's own objects are never wrapped in a reactive proxy -
   // which would break them - and held in state all the same, so that drawing can
   // wait for the map to exist without guessing when that was.
-  let map = $state.raw<L.Map | undefined>(undefined)
-  let shapes = $state.raw<L.LayerGroup | undefined>(undefined)
+  let surface = $state.raw<ImageryMap | undefined>(undefined)
 
   /** A move in progress: what is being carried, and where it was taken hold of. */
   let moving: { readonly id: string; readonly grab: Offset } | undefined = undefined
@@ -104,53 +100,7 @@
    * press handler asks it about its own finger.
    */
   export function offsetAt(point: Point): Offset | undefined {
-    const current = map
-    if (current === undefined) {
-      return undefined
-    }
-
-    const rect = element.getBoundingClientRect()
-    if (
-      point.x < rect.left ||
-      point.x > rect.right ||
-      point.y < rect.top ||
-      point.y > rect.bottom
-    ) {
-      return undefined
-    }
-
-    const onTheGround = current.containerPointToLatLng(
-      L.point(point.x - rect.left, point.y - rect.top),
-    )
-
-    return offsetFromLatLng(origin, {
-      latitude: onTheGround.lat,
-      longitude: onTheGround.lng,
-    })
-  }
-
-  function toTuple(point: LatLng): L.LatLngTuple {
-    return [point.latitude, point.longitude]
-  }
-
-  function toBounds(bounds: LatLngBounds): L.LatLngBounds {
-    return L.latLngBounds(toTuple(bounds.southWest), toTuple(bounds.northEast))
-  }
-
-  /**
-   * The padding above, in ground metres, which is the only form `containsPoint`
-   * can use and which changes with the zoom. The map's own scale answers it,
-   * from the same core function that decides what true scale means.
-   */
-  function hitPaddingMetres(): number {
-    const current = map
-    if (current === undefined) {
-      return 0
-    }
-
-    const centre = current.getCenter()
-
-    return HIT_PADDING_PIXELS * metresPerPixel(centre.lat, current.getZoom())
+    return surface?.offsetAt(point)
   }
 
   /**
@@ -173,13 +123,13 @@
    * moving one must never be the same press.
    */
   function handlePoint(corners: readonly LatLng[]): LatLng | undefined {
-    const current = map
+    const current = surface
     if (current === undefined) {
       return undefined
     }
 
     const [first, second, third, fourth] = corners.map((corner) =>
-      current.latLngToContainerPoint(toTuple(corner)),
+      current.map.latLngToContainerPoint(toTuple(corner)),
     )
 
     if (
@@ -202,7 +152,7 @@
       return undefined
     }
 
-    const at = current.containerPointToLatLng(
+    const at = current.map.containerPointToLatLng(
       L.point(
         nose.x + (along.x / length) * HANDLE_PIXELS,
         nose.y + (along.y / length) * HANDLE_PIXELS,
@@ -213,23 +163,23 @@
   }
 
   function pressed(event: PointerEvent): void {
-    const current = map
+    const current = surface
     if (current === undefined) {
       return
     }
 
     // A second finger on a vehicle being handled is not a second gesture: it is
     // someone pinching, so the gesture is abandoned and the map gets both fingers.
-    if (!event.isPrimary) {
-      stopMoving(current)
-      stopTurning(current)
-      return
-    }
-    if (!isDragStart(event)) {
+    if (
+      !current.beginsGesture(event, () => {
+        stopMoving()
+        stopTurning()
+      })
+    ) {
       return
     }
 
-    const here = offsetAt({ x: event.clientX, y: event.clientY })
+    const here = current.offsetAt({ x: event.clientX, y: event.clientY })
     if (here === undefined) {
       return
     }
@@ -247,14 +197,16 @@
         id: chosen.id,
         grip: bearingBetween(chosen.centre, here) - chosen.rotationDegrees,
       }
-      current.dragging.disable()
+      current.stopPanning()
       return
     }
 
     // Last drawn first, so the vehicle on top is the one that is grabbed.
     const hit = [...placements]
       .reverse()
-      .find((each) => containsPoint(rectangleOf(each), here, hitPaddingMetres()))
+      .find((each) =>
+        containsPoint(rectangleOf(each), here, current.metresForPixels(HIT_PADDING_PIXELS)),
+      )
 
     if (hit === undefined) {
       onselect(undefined)
@@ -273,11 +225,16 @@
     // A press on a vehicle moves the vehicle rather than the picture. Leaflet
     // starts its own drag from mousedown, which arrives after this, so stopping
     // it here is in time. Everything not on a vehicle is left alone.
-    current.dragging.disable()
+    current.stopPanning()
   }
 
   function moved(event: PointerEvent): void {
-    const here = offsetAt({ x: event.clientX, y: event.clientY })
+    const current = surface
+    if (current === undefined) {
+      return
+    }
+
+    const here = current.offsetAt({ x: event.clientX, y: event.clientY })
     if (here === undefined) {
       return
     }
@@ -315,7 +272,7 @@
     if (spin !== undefined) {
       const settled = turned
 
-      stopTurning(map)
+      stopTurning()
 
       if (settled !== undefined) {
         onrotate(spin.id, settled)
@@ -330,7 +287,7 @@
     const settled = dragged
     const id = moving.id
 
-    stopMoving(map)
+    stopMoving()
 
     if (settled !== undefined) {
       onmove(id, settled)
@@ -338,37 +295,37 @@
   }
 
   function cancelled(): void {
-    stopMoving(map)
-    stopTurning(map)
+    stopMoving()
+    stopTurning()
   }
 
-  function stopMoving(current: L.Map | undefined): void {
+  function stopMoving(): void {
     if (moving === undefined) {
       return
     }
 
     moving = undefined
     dragged = undefined
-    current?.dragging.enable()
+    surface?.allowPanning()
   }
 
-  function stopTurning(current: L.Map | undefined): void {
+  function stopTurning(): void {
     if (turning === undefined) {
       return
     }
 
     turning = undefined
     turned = undefined
-    current?.dragging.enable()
+    surface?.allowPanning()
   }
 
   /** How long a vehicle is on screen right now, in pixels. */
   function screenLength(corners: readonly LatLng[]): number {
-    const current = map
+    const current = surface
     const [, second, third] =
       current === undefined
         ? []
-        : corners.map((corner) => current.latLngToContainerPoint(toTuple(corner)))
+        : corners.map((corner) => current.map.latLngToContainerPoint(toTuple(corner)))
 
     if (second === undefined || third === undefined) {
       return 0
@@ -385,7 +342,7 @@
     selected: boolean,
     overlapping: boolean,
   ): void {
-    const into = shapes
+    const into = surface?.layers
     if (into === undefined) {
       return
     }
@@ -441,19 +398,10 @@
   }
 
   $effect(() => {
-    const created = L.map(element, {
-      // The plane the imagery is fetched in, so the picture is never stretched.
-      crs: L.CRS.EPSG3857,
-      attributionControl: false,
-      // So opening a Site can sit exactly on its frame instead of near it.
-      zoomSnap: 0,
-      maxZoom: plan.maxZoom,
-    })
-
-    L.imageOverlay(imageUrl, toBounds(plan.bounds)).addTo(created)
+    const created = imageryMap(element, plan, imageUrl, origin)
 
     if (frame === undefined) {
-      created.fitBounds(toBounds(plan.bounds))
+      created.map.fitBounds(toBounds(plan.bounds))
     } else {
       // A guide and never a limit, which is why it is drawn as an outline rather
       // than as a mask over everything outside it.
@@ -467,28 +415,26 @@
           fill: false,
           interactive: false,
         },
-      ).addTo(created)
+      ).addTo(created.map)
 
-      created.fitBounds(guide.getBounds(), { padding: [16, 16] })
+      created.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
     }
 
-    shapes = L.layerGroup().addTo(created)
-    map = created
+    surface = created
 
     return () => {
-      map = undefined
-      shapes = undefined
-      created.remove()
+      surface = undefined
+      created.destroy()
     }
   })
 
   $effect(() => {
-    const current = map
-    const into = shapes
-    if (current === undefined || into === undefined) {
+    const current = surface
+    if (current === undefined) {
       return
     }
 
+    const into = current.layers
     const chosen = selectedId
     const carried = dragged
     const spun = turned
@@ -531,10 +477,10 @@
 
     // A label is measured in screen pixels, so what fits on a vehicle changes
     // with the zoom rather than with anything about the layout.
-    current.on('zoomend', drawAll)
+    current.map.on('zoomend', drawAll)
 
     return () => {
-      current.off('zoomend', drawAll)
+      current.map.off('zoomend', drawAll)
     }
   })
 </script>
