@@ -2,7 +2,7 @@
   import { SYSTEM_COLLECTION_NAME } from '../core/collection'
   import { cssColour } from '../core/colour'
   import { toFeetAndInches } from '../core/units'
-  import { vehicle, type Vehicle } from '../core/vehicle'
+  import { sameVehicle, vehicle, type Vehicle } from '../core/vehicle'
   import {
     MAXIMUM_COLLECTION_NAME_LENGTH,
     nameFor,
@@ -99,6 +99,19 @@
    */
   let formId = $state(0)
 
+  /**
+   * Said when a vehicle equal to one already in the collection is added.
+   *
+   * A collection holds each vehicle once, because it is a set of vehicle types
+   * rather than a tally of rigs. That rule is the core's and is not changed; all
+   * this does is say why nothing appeared, since a visitor adding what looks like
+   * a second identical rig would otherwise be left guessing.
+   */
+  let vehicleComplaint = $state('')
+
+  const ALREADY_IN_COLLECTION =
+    'This collection already has that vehicle. A collection holds each vehicle once; to use two of it, place a second on the Layout.'
+
   /** What a new vehicle starts from: something to change, not a guess at a fleet. */
   const A_NEW_VEHICLE = vehicle({
     name: 'New vehicle',
@@ -132,11 +145,13 @@
 
   function addVehicle(id: string): void {
     formId += 1
+    vehicleComplaint = ''
     form = { inCollection: id, of: A_NEW_VEHICLE, adding: true }
   }
 
   function editVehicle(id: string, which: Vehicle): void {
     formId += 1
+    vehicleComplaint = ''
     form = { inCollection: id, of: which, adding: false }
   }
 
@@ -152,6 +167,22 @@
     // The name follows through the same rule the core applies to a vehicle made
     // with no label at all, and only until the visitor gives one themselves.
     const next = open.adding ? labelled(requested) : requested
+
+    // The core refuses a second equal vehicle by leaving the collection as it
+    // was. Say so here rather than letting the form quietly do nothing: the
+    // visitor keeps the form open (still adding) so changing the name or colour
+    // makes a distinct vehicle and it can be added.
+    if (
+      open.adding &&
+      shown !== undefined &&
+      shown.vehicles.some((one) => sameVehicle(one, next))
+    ) {
+      vehicleComplaint = ALREADY_IN_COLLECTION
+      form = { inCollection: open.inCollection, of: next, adding: true }
+      return
+    }
+
+    vehicleComplaint = ''
 
     if (open.adding) {
       onaddvehicle(open.inCollection, next)
@@ -289,6 +320,9 @@
     {#if form !== undefined}
       {#key formId}
         <VehicleEditor of={form.of} onchange={corrected} />
+        {#if vehicleComplaint !== ''}
+          <p role="alert">{vehicleComplaint}</p>
+        {/if}
         <button
           type="button"
           onclick={() => {

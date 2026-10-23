@@ -179,6 +179,32 @@ test('corrects a vehicle in a collection, and removes it', async ({ page }) => {
   await expect(row).toHaveCount(0)
 })
 
+test('says why a second identical vehicle does not appear', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await makeCollection(page)
+  await addVehicle(page, 'Tow truck', '20', '8')
+
+  // Adding the same vehicle again is refused, because a collection holds each
+  // vehicle once. It is said plainly rather than the form quietly doing nothing.
+  await sheet(page).getByRole('button', { name: 'Add a vehicle' }).click()
+
+  const form = vehicleForm(page)
+  await form.getByLabel('Name').fill('Tow truck')
+  await form.getByLabel('Length, feet').fill('20')
+  await form.getByLabel('Width, feet').fill('8')
+
+  await expect(sheet(page).getByRole('alert')).toContainText('already has that vehicle')
+  await expect(sheet(page).getByRole('listitem').filter({ hasText: 'Tow truck' })).toHaveCount(1)
+
+  // Making it a distinct vehicle - a different width here - lets it in, and it
+  // does not need the form reopened.
+  await form.getByLabel('Width, feet').fill('9')
+  await expect(sheet(page).getByRole('listitem').filter({ hasText: 'Tow truck' })).toHaveCount(2)
+})
+
 test('will not let a collection take the System Collection name, and says why', async ({
   page,
 }) => {
