@@ -62,11 +62,25 @@ export interface ImageryMap {
   destroy(): void
 }
 
+export interface ImageryMapOptions {
+  /**
+   * Whether a double tap zooms the picture in.
+   *
+   * On by default, which is the familiar map gesture. The visitor's map turns it
+   * off: a tap there means select, and Leaflet has no notion of where the two
+   * taps were, so tapping a vehicle and then tapping the ground to let it go
+   * reads as a double tap and zooms the picture towards the second tap. Two
+   * fingers zoom, and the zoom control is there for everything else.
+   */
+  readonly doubleTapZoom?: boolean
+}
+
 export function imageryMap(
   element: HTMLElement,
   plan: ImageryPlan,
   imageUrl: string,
   origin: LatLng,
+  options: ImageryMapOptions = {},
 ): ImageryMap {
   const map = L.map(element, {
     // The plane the imagery is fetched in, so the picture is never stretched.
@@ -75,6 +89,7 @@ export function imageryMap(
     // So the picture can sit exactly in the view rather than near it.
     zoomSnap: 0,
     maxZoom: plan.maxZoom,
+    doubleClickZoom: options.doubleTapZoom ?? true,
   })
 
   L.imageOverlay(imageUrl, toBounds(plan.bounds)).addTo(map)

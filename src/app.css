@@ -49,6 +49,10 @@ body {
 }
 
 .bar button {
+  /* A thumb, not a mouse: the row this is in is the one a hand holding the
+     phone reaches without shifting its grip, and a control has to be a
+     fingertip across to be worth putting there. */
+  min-height: 2.5rem;
   padding: 0.25rem 0.75rem;
 }
 
@@ -96,6 +100,17 @@ body {
  */
 path.placement {
   fill-opacity: var(--placement-opacity);
+}
+
+/*
+ * A vehicle a long press has picked up.
+ *
+ * The dash is the confirmation that the hold took: from here the finger moves
+ * the vehicle rather than the picture, and a target only a few pixels across
+ * needs to say so before it is dragged rather than after.
+ */
+path.placement.picked-up {
+  stroke-dasharray: 6 3;
 }
 
 /*

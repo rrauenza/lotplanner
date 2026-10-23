@@ -1,6 +1,8 @@
 <script lang="ts">
   import L from 'leaflet'
 
+  import { untrack } from 'svelte'
+
   import {
     bearingBetween,
     containsPoint,
@@ -23,8 +25,34 @@
    * screen pixels rather than in metres. A vehicle is two metres across and a
    * fingertip is not, and a fixed number of metres would be invisible exactly
    * when it is needed - zoomed out, where a car is a handful of pixels.
+   *
+   * Generous, because the thing being grabbed is small: a car is under seven
+   * pixels wide at the scale this app opens at, so the target is grown by about
+   * a fingertip in each direction instead of by the drawn rectangle. Nothing
+   * about the drawing changes - a vehicle occupies the ground it occupies, and
+   * the pad is invisible.
    */
-  const HIT_PADDING_PIXELS = 8
+  const HIT_PADDING_PIXELS = 18
+
+  /**
+   * How far a finger may travel before a press on a vehicle becomes a move.
+   *
+   * A tap that jitters is not a drag. On a car under seven pixels wide, arming
+   * the move the moment the finger lands would nudge it every time someone
+   * selected it, so the press waits for the finger to travel - or for a long
+   * press to pick the vehicle up.
+   */
+  const PRESS_SLOP_PIXELS = 8
+
+  /**
+   * How long a finger is held still on a vehicle before it is picked up.
+   *
+   * Long enough to be a deliberate hold rather than a tap, and short enough not
+   * to feel like waiting. The hold is what makes a small or overlapping target
+   * reliable: it arms the move without the finger having to travel, so the next
+   * movement moves the vehicle rather than panning the picture.
+   */
+  const LONG_PRESS_MILLISECONDS = 500
 
   /** The diameter of the handle a vehicle is turned by, in screen pixels. */
   const HANDLE_PIXELS = 26
@@ -57,6 +85,12 @@
      * kept with a Layout.
      */
     opacity: number
+    /**
+     * Whether every vehicle is frozen, so that every gesture pans the map. A
+     * view of the session rather than part of the work, which is why it arrives
+     * here rather than being kept with a Layout.
+     */
+    locked: boolean
     onselect: (id: string | undefined) => void
     onmove: (id: string, centre: Offset) => void
     onrotate: (id: string, rotationDegrees: number) => void
@@ -70,6 +104,7 @@
     placements,
     selectedId,
     opacity,
+    locked,
     onselect,
     onmove,
     onrotate,
@@ -84,6 +119,23 @@
 
   /** A move in progress: what is being carried, and where it was taken hold of. */
   let moving: { readonly id: string; readonly grab: Offset } | undefined = undefined
+
+  /**
+   * A press on a vehicle that has not yet become a move: what is under the
+   * finger, where it was taken hold of, and where the finger landed.
+   *
+   * Kept apart from `moving` so that a tap - even one that slides a few pixels -
+   * can be told from a drag, which is what stops selecting a small vehicle from
+   * nudging it.
+   */
+  let pressing: { readonly id: string; readonly grab: Offset; readonly from: Point } | undefined =
+    undefined
+
+  /** The timer that turns a still press into a long press. */
+  let holding: ReturnType<typeof setTimeout> | undefined = undefined
+
+  /** Whether a long press has picked the vehicle up, until the finger is lifted. */
+  let pickedUp = $state(false)
 
   /** Where a carried vehicle is this instant, before the move is committed. */
   let dragged = $state<Offset | undefined>(undefined)
@@ -168,6 +220,12 @@
       return
     }
 
+    // Locked: no gesture belongs to a vehicle, so every one of them is the
+    // map's - a drag that begins on a vehicle pans it like any other.
+    if (locked) {
+      return
+    }
+
     // A second finger on a vehicle being handled is not a second gesture: it is
     // someone pinching, so the gesture is abandoned and the map gets both fingers.
     if (
@@ -214,18 +272,42 @@
     }
 
     onselect(hit.id)
-    moving = {
+
+    // Taken hold of but not yet moved: a tap selects, a long press picks up, and
+    // only a finger that travels does either of those become a move.
+    pressing = {
       id: hit.id,
       grab: {
         eastMetres: hit.centre.eastMetres - here.eastMetres,
         northMetres: hit.centre.northMetres - here.northMetres,
       },
+      from: { x: event.clientX, y: event.clientY },
     }
+    clearTimeout(holding)
+    holding = setTimeout(pickUp, LONG_PRESS_MILLISECONDS)
 
     // A press on a vehicle moves the vehicle rather than the picture. Leaflet
     // starts its own drag from mousedown, which arrives after this, so stopping
     // it here is in time. Everything not on a vehicle is left alone.
     current.stopPanning()
+  }
+
+  /**
+   * Long press: pick the vehicle up.
+   *
+   * The move is armed without the finger having travelled, which is the whole
+   * point - a car or a few inches of overlap is too small to grab by moving
+   * first, and the hold is what tells a deliberate grab from a tap.
+   */
+  function pickUp(): void {
+    const press = pressing
+    if (press === undefined) {
+      return
+    }
+
+    forgetPressing()
+    moving = { id: press.id, grab: press.grab }
+    pickedUp = true
   }
 
   function moved(event: PointerEvent): void {
@@ -250,6 +332,18 @@
       // to settle onto the row it is being lined up with.
       turned = snapAngle(bearingBetween(chosen.centre, here) - spin.grip, candidatesFor(spin.id))
       return
+    }
+
+    const press = pressing
+    if (
+      press !== undefined &&
+      Math.hypot(event.clientX - press.from.x, event.clientY - press.from.y) > PRESS_SLOP_PIXELS
+    ) {
+      // Travel, so it is a drag after all: the move is armed from where it was
+      // taken hold of, and the press is done. The finger having come this far
+      // means the picture does not start panning either.
+      forgetPressing()
+      moving = { id: press.id, grab: press.grab }
     }
 
     const carry = moving
@@ -281,6 +375,9 @@
     }
 
     if (moving === undefined) {
+      // A tap, or a press that never became either: the selection stands, the
+      // vehicle has not moved, and the finger goes back to the map.
+      cancelPressing()
       return
     }
 
@@ -295,17 +392,47 @@
   }
 
   function cancelled(): void {
+    cancelPressing()
     stopMoving()
     stopTurning()
   }
 
+  /**
+   * Let go of a press without giving the finger back: what becomes a move keeps
+   * the map's drag stopped, and only the end of a gesture or it being abandoned
+   * hands the map back.
+   */
+  function forgetPressing(): void {
+    clearTimeout(holding)
+    holding = undefined
+    pressing = undefined
+    pickedUp = false
+  }
+
+  /** Give a press up entirely, so the map pans from here. */
+  function cancelPressing(): void {
+    const wasPressing = pressing !== undefined
+
+    forgetPressing()
+
+    if (wasPressing) {
+      surface?.allowPanning()
+    }
+  }
+
   function stopMoving(): void {
+    // A press is a move waiting to happen, so it goes with the map's drag being
+    // given back - which is what a second finger needs when one is down on a
+    // vehicle: the pinch gets both fingers and nothing moves.
+    cancelPressing()
+
     if (moving === undefined) {
       return
     }
 
     moving = undefined
     dragged = undefined
+    pickedUp = false
     surface?.allowPanning()
   }
 
@@ -341,6 +468,7 @@
     placement: Placement,
     selected: boolean,
     overlapping: boolean,
+    picked: boolean,
   ): void {
     const into = surface?.layers
     if (into === undefined) {
@@ -348,7 +476,7 @@
     }
 
     L.polygon(corners.map(toTuple), {
-      className: `placement${selected ? ' selected' : ''}${overlapping ? ' overlapping' : ''}`,
+      className: `placement${selected ? ' selected' : ''}${overlapping ? ' overlapping' : ''}${picked ? ' picked-up' : ''}`,
       color: overlapping ? OVERLAP_COLOUR : selected ? '#ffffff' : '#1b1b1b',
       weight: selected ? 3 : overlapping ? 2 : 1,
       fillColor: cssColour(placement.vehicle.colour),
@@ -398,29 +526,42 @@
   }
 
   $effect(() => {
-    const created = imageryMap(element, plan, imageUrl, origin)
+    // Built once for this picture, and deliberately not rebuilt when an edit
+    // changes the Layout.
+    //
+    // A Layout is a fresh object on every edit - a moved Placement makes a new
+    // one - so a tracked read of these props recreates the whole map and
+    // re-fits the view on every drag, and the ground jumps back to the frame
+    // under the finger. One component is mounted per picture (choosing a place
+    // goes through the loading state, which takes the map down), so none of
+    // these four values changes underneath it.
+    const created = untrack(() => {
+      const map = imageryMap(element, plan, imageUrl, origin, { doubleTapZoom: false })
 
-    if (frame === undefined) {
-      created.map.fitBounds(toBounds(plan.bounds))
-    } else {
-      // A guide and never a limit, which is why it is drawn as an outline rather
-      // than as a mask over everything outside it.
-      const guide = L.polygon(
-        cornersOf(frame).map((corner) => toTuple(latLngFromOffset(origin, corner))),
-        {
-          className: 'frame-guide',
-          color: '#ffd166',
-          weight: 2,
-          dashArray: '6 4',
-          fill: false,
-          interactive: false,
-        },
-      ).addTo(created.map)
+      if (frame === undefined) {
+        map.map.fitBounds(toBounds(plan.bounds))
+      } else {
+        // A guide and never a limit, which is why it is drawn as an outline
+        // rather than as a mask over everything outside it.
+        const guide = L.polygon(
+          cornersOf(frame).map((corner) => toTuple(latLngFromOffset(origin, corner))),
+          {
+            className: 'frame-guide',
+            color: '#ffd166',
+            weight: 2,
+            dashArray: '6 4',
+            fill: false,
+            interactive: false,
+          },
+        ).addTo(map.map)
 
-      created.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
-    }
+        map.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
+      }
 
-    surface = created
+      surface = map
+
+      return map
+    })
 
     return () => {
       surface = undefined
@@ -435,9 +576,12 @@
     }
 
     const into = current.layers
-    const chosen = selectedId
+    // Nothing is selected while locked: the handle belongs to a selection, and
+    // a lock means there is nothing to take hold of.
+    const chosen = locked ? undefined : selectedId
     const carried = dragged
     const spun = turned
+    const held = pickedUp && moving !== undefined ? moving.id : undefined
 
     // What is drawn, which is the layout with anything in flight laid over it:
     // a vehicle being carried is where the finger is, and one being turned is at
@@ -469,6 +613,7 @@
           placement,
           placement.id === chosen,
           overlapping.has(placement.id),
+          placement.id === held,
         )
       }
     }
@@ -482,6 +627,20 @@
     return () => {
       current.map.off('zoomend', drawAll)
     }
+  })
+
+  $effect(() => {
+    if (!locked) {
+      return
+    }
+
+    // A lock arriving mid-gesture ends it, so that from the moment it is on,
+    // every finger pans. Read untracked: what is in flight is not a reason for
+    // this to run again.
+    untrack(() => {
+      stopMoving()
+      stopTurning()
+    })
   })
 </script>
 
@@ -506,9 +665,13 @@
 <style>
   .map {
     /* Fills what is left of the screen, so the photograph is the point of the
-       page rather than an illustration on it. */
-    flex: 1;
-    min-height: 20rem;
+       page rather than an illustration on it.
+       No floor of its own: the stage decides how tall the photograph may be,
+       and on a short phone the map gives way to the controls below it rather
+       than sitting on top of them. It was a `min-height` here that pushed the
+       Layouts row and the palette off a 390x664 screen. */
     background: #111;
+    flex: 1;
+    min-height: 0;
   }
 </style>

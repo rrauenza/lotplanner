@@ -50,3 +50,23 @@ The Site Frame supplies the axes that north cannot.
   angles alone — degraded, not broken, and never a setup gate before placing anything.
 - A lot with two wings at different angles cannot be expressed by one frame, which is why neighbour
   snapping is kept alongside it.
+
+## What building it settled
+
+- **The pad is a number of screen pixels, not of metres.** A car is under seven pixels wide where
+  this app opens, and a metre of padding would be invisible exactly where it is needed. The target
+  is grown by about a fingertip in every direction; the drawing is not, so a vehicle still occupies
+  the ground it occupies.
+- **A press travels before it moves anything.** A vehicle a few pixels across cannot be selected by
+  a finger that also nudges it, so the move arms on movement beyond a small slop, or on the long
+  press. The long press is what makes the small or overlapping target reliable: the move is armed
+  while the finger is still, so the next movement is a move and not a pan. A picked-up vehicle is
+  marked until the finger is lifted, because the hold has to say that it took.
+- **A tap is select, so double-tap-to-zoom is off.** Leaflet fires a double tap for any two taps
+  within 200 ms, wherever they landed, so on a map where a tap selects, tapping a vehicle and then
+  tapping the ground to let it go zoomed the picture towards the second tap. Two fingers zoom, and
+  the zoom control is there for everything else.
+- **The lock is a view of the session, not part of the work.** It is not written into a Layout, it
+  does not survive a reload, and it is not on the undo stack (ADR 0008) — the same reasoning that
+  keeps the map's viewport and the opacity out of a Layout. Locking also lets go of the selection,
+  because a handle and a form are things to touch.

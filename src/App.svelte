@@ -161,6 +161,15 @@
   let opacity = $state(0.4)
 
   /**
+   * Whether every vehicle is frozen, so that every gesture pans the picture.
+   *
+   * A view of this session like the opacity, and not part of the work: nothing
+   * records it, a reload starts unlocked, and nothing about it is written into a
+   * Layout (ADR 0008). It is not an edit either, so undo does not reach it.
+   */
+  let locked = $state(false)
+
+  /**
    * How long edits settle before the Site's work is written. Long enough that
    * typing a name into the form is one write rather than one per keystroke,
    * short enough that a phone call arriving costs nothing worth noticing.
@@ -720,6 +729,21 @@
     opacity = next
   }
 
+  /**
+   * Freeze every vehicle, or let them go again.
+   *
+   * Locking lets go of the selection: a handle and a form are things to touch,
+   * and a lock means touching does not move anything. Not `change`: nothing
+   * about the Layout moves, so there is nothing for undo to reverse.
+   */
+  function toggleLock(): void {
+    locked = !locked
+
+    if (locked) {
+      selectedId = undefined
+    }
+  }
+
   function movePlacement(id: string, centre: Offset): void {
     if (layout !== undefined) {
       change(withMovedPlacement(layout, id, centre))
@@ -850,6 +874,7 @@
         placements={layout.placements}
         {selectedId}
         {opacity}
+        {locked}
         onselect={selectPlacement}
         onmove={movePlacement}
         onrotate={rotatePlacement}
@@ -924,40 +949,59 @@
         {/key}
       {/if}
     </div>
-    <!-- Always reachable, and never inside the selection's sheet: undoing a
-         delete has to be possible when nothing is selected any more. -->
-    <div class="bar">
-      <!-- Which Layout this is, and the way to the others. Named for what it
-           opens rather than for itself, so that a screen reader is told what the
-           button is as well as what it currently says. -->
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-label={`Layouts: ${openName}`}
-        onclick={showLayouts}
-      >
-        {openName}
-      </button>
-      <button type="button" title="Ctrl and Z" disabled={!undoable} onclick={undoEdit}>
-        Undo
-      </button>
-      <button type="button" title="Ctrl, Shift and Z" disabled={!redoable} onclick={redoEdit}>
-        Redo
-      </button>
-      <button type="button" onclick={() => void share()}>Share</button>
+    <!-- Everything below the photograph, in one block that gives way on a short
+         screen: the map keeps a modest floor and this is what scrolls when
+         there is not enough height for both, rather than the map overflowing
+         and sitting on top of it. -->
+    <div class="chrome">
+      <!-- Always reachable, and never inside the selection's sheet: undoing a
+           delete has to be possible when nothing is selected any more. -->
+      <div class="bar">
+        <!-- Which Layout this is, and the way to the others. Named for what it
+             opens rather than for itself, so that a screen reader is told what
+             the button is as well as what it currently says. -->
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          aria-label={`Layouts: ${openName}`}
+          onclick={showLayouts}
+        >
+          {openName}
+        </button>
+        <button type="button" title="Ctrl and Z" disabled={!undoable} onclick={undoEdit}>
+          Undo
+        </button>
+        <button type="button" title="Ctrl, Shift and Z" disabled={!redoable} onclick={redoEdit}>
+          Redo
+        </button>
+        <button type="button" onclick={() => void share()}>Share</button>
+        <!-- Freezes the vehicles so that every gesture pans the picture, for
+             reviewing what is finished and for moving the view while placing
+             many. A view of the session rather than part of the work, so it is
+             not named for a Layout and not saved. -->
+        <button
+          type="button"
+          aria-pressed={locked}
+          aria-label="Lock vehicles"
+          title="Freeze the vehicles so every gesture pans"
+          onclick={toggleLock}
+        >
+          {locked ? 'Locked' : 'Lock'}
+        </button>
+      </div>
+      <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
+      <Palette
+        collections={collections ?? []}
+        chosen={chosenCollection}
+        onchoose={chooseCollection}
+        onmanage={showCollections}
+        ondrop={dropFrom}
+        onplace={placeInTheMiddle}
+      />
+      <!-- Here even before it is known, so that the credit arriving cannot
+           resize the map either. -->
+      <p class="credit">{attribution}</p>
     </div>
-    <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
-    <Palette
-      collections={collections ?? []}
-      chosen={chosenCollection}
-      onchoose={chooseCollection}
-      onmanage={showCollections}
-      ondrop={dropFrom}
-      onplace={placeInTheMiddle}
-    />
-    <!-- Here even before it is known, so that the credit arriving cannot resize
-         the map either. -->
-    <p class="credit">{attribution}</p>
   {/if}
 </main>
 
@@ -970,6 +1014,9 @@
     /* The photograph is the page, so it takes whatever the chrome does not. */
     height: 100dvh;
     padding: 0.75rem 1rem;
+    /* Nothing spills past the viewport: what does not fit is decided between
+       the stage and the chrome below, not by letting one overflow the other. */
+    overflow: hidden;
   }
 
   header h1 {
@@ -989,6 +1036,8 @@
   }
 
   nav button {
+    /* A fingertip across, like every other control a thumb reaches for. */
+    min-height: 2.5rem;
     padding: 0.5rem 0.75rem;
   }
 
@@ -1002,9 +1051,31 @@
     /* The photograph fills the stage, and anything that belongs to a vehicle
        floats over it rather than taking room from it: a map that resizes when
        something is selected moves the ground under the finger that selected it. */
-    flex: 1;
-    min-height: 0;
+    flex: 1 1 auto;
+    /* A modest floor, so the photograph stays a photograph. The chrome below
+       gives way instead - the map itself once had a 20rem floor, and on a
+       390x664 screen it won and pushed the controls off the page. */
+    min-height: 10rem;
     position: relative;
+  }
+
+  .chrome {
+    display: flex;
+    flex: 0 1 auto;
+    flex-direction: column;
+    gap: 0.5rem;
+    /* The part that scrolls when the screen is shorter than the controls need:
+       everything here stays reachable, without the map giving up more than its
+       own floor. */
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .chrome > * {
+    /* The panels keep the height they ask for, and the chrome scrolls past what
+       it cannot show. Without this they are flex items and shrink instead,
+       which turns the palette into a second, clipped scroll area of its own. */
+    flex-shrink: 0;
   }
 
   .notsaved {

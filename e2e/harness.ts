@@ -219,6 +219,84 @@ export async function touchDrag(page: Page, from: Point, to: Point, steps = 8): 
   await cdp.detach()
 }
 
+/**
+ * Two fingers, the second joining after the first has already landed.
+ *
+ * The order is the point: it is the mis-grab the interaction model has an escape
+ * from - one finger took hold of a vehicle before the other arrived to pinch.
+ * Each finger travels its own way, so one gesture is a pan when they move
+ * together and a zoom when they do not.
+ */
+export async function touchTwoFinger(
+  page: Page,
+  first: Point,
+  firstTo: Point,
+  second: Point,
+  secondTo: Point,
+  steps = 8,
+): Promise<void> {
+  const cdp = await page.context().newCDPSession(page)
+  const partWay = (from: Point, to: Point, step: number): Point => ({
+    x: from.x + ((to.x - from.x) * step) / steps,
+    y: from.y + ((to.y - from.y) * step) / steps,
+  })
+
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first] })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [first, second] })
+
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [partWay(first, firstTo, step), partWay(second, secondTo, step)],
+    })
+  }
+
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
+/**
+ * A press that is held still, and only then dragged.
+ *
+ * Long press is a gesture of intent rather than of speed, so the pause is part
+ * of the gesture and a test of it cannot be written without one. `afterHold`
+ * runs while the finger is still down, which is the only moment the picked-up
+ * state exists to be seen.
+ */
+export async function touchHoldDrag(
+  page: Page,
+  from: Point,
+  to: Point,
+  holdMilliseconds: number,
+  steps = 8,
+  afterHold?: () => Promise<void>,
+): Promise<void> {
+  const cdp = await page.context().newCDPSession(page)
+
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: from.x, y: from.y }],
+  })
+
+  await page.waitForTimeout(holdMilliseconds)
+  await afterHold?.()
+
+  for (let step = 1; step <= steps; step += 1) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        {
+          x: from.x + ((to.x - from.x) * step) / steps,
+          y: from.y + ((to.y - from.y) * step) / steps,
+        },
+      ],
+    })
+  }
+
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 /** Take hold of a handle and turn it to a bearing, about a centre on the screen. */
 export async function turnHandle(
   page: Page,
