@@ -104,23 +104,41 @@ const PLACEMENTS = 6
 const CENTIMETRES_PER_METRE = 100
 const TENTHS_PER_DEGREE = 10
 
+/**
+ * The artifact as its fields, before they are spelled as text.
+ *
+ * A link spells these as the whole of its text; a file (issue #14) puts them
+ * inside its envelope. Both hand the same fields to the same reader, which is
+ * what keeps one version field and one migration chain rather than two.
+ */
+export function encodeArtifactFields(artifact: Artifact): readonly unknown[] {
+  return artifact.kind === 'layout'
+    ? layoutFields(artifact.layout)
+    : collectionFields(artifact.collection)
+}
+
 /** The compact spelling of an artifact, ready to be compressed. */
 export function encodeArtifact(artifact: Artifact): string {
-  return JSON.stringify(
-    artifact.kind === 'layout'
-      ? layoutFields(artifact.layout)
-      : collectionFields(artifact.collection),
-  )
+  return JSON.stringify(encodeArtifactFields(artifact))
 }
 
 /** The artifact a text holds, or why it could not be read. */
 export function decodeArtifact(text: string, reading: Reading = {}): Decoded {
   const parsed = parse(text)
 
-  if (parsed === undefined) {
-    return { kind: 'unreadable', message: UNREADABLE }
-  }
+  return parsed === undefined
+    ? { kind: 'unreadable', message: UNREADABLE }
+    : decodeArtifactFields(parsed, reading)
+}
 
+/**
+ * The artifact some already-parsed fields hold, or why they could not be read.
+ *
+ * The reader itself, separate from the parsing of text, so that a file - whose
+ * artifact arrives already parsed, inside its envelope - is read by this very
+ * function rather than by a second one that might drift from it.
+ */
+export function decodeArtifactFields(parsed: readonly unknown[], reading: Reading = {}): Decoded {
   const [kind, version, ...body] = parsed
 
   if (typeof kind !== 'string' || typeof version !== 'number' || !Number.isInteger(version)) {

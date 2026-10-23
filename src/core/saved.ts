@@ -130,6 +130,55 @@ export function nextName(saved: readonly SavedLayout[]): string {
 }
 
 /**
+ * What an imported Layout is called here: the name it arrived under, if it is
+ * free, and a suffixed one if it is not.
+ *
+ * An import is not a rename, so it must not take a name away from work already
+ * on this Site - the same reason a received Collection is suffixed rather than
+ * merged. Compared case-insensitively, because two rows that read the same are
+ * not a list anyone can use, and with `nextName` for an arrival that carried no
+ * name at all so that a blank row never appears.
+ */
+function importedName(wanted: string | undefined, saved: readonly SavedLayout[]): string {
+  const tidied = tidy(wanted ?? '').slice(0, MAXIMUM_LAYOUT_NAME_LENGTH)
+
+  if (tidied === '') {
+    return nextName(saved)
+  }
+
+  const taken = new Set(saved.map((each) => each.name.toLowerCase()))
+
+  if (!taken.has(tidied.toLowerCase())) {
+    return tidied
+  }
+
+  for (let number = 2; ; number += 1) {
+    const candidate = `${tidied} (${String(number)})`
+
+    if (!taken.has(candidate.toLowerCase())) {
+      return candidate
+    }
+  }
+}
+
+/**
+ * The Site's work with an imported Layout added under its own id.
+ *
+ * Kept at the front like any other new work, and given the first free name for
+ * what it arrived under. Everything already here is returned untouched: an
+ * import adds a Layout, and has no way to replace one, because the caller hands
+ * in the id of the thing being added rather than the id of anything present.
+ */
+export function withImported(
+  saved: readonly SavedLayout[],
+  layout: Layout,
+  wanted: string | undefined,
+  id: string,
+): readonly SavedLayout[] {
+  return withSaved(saved, { id, name: importedName(wanted, saved), layout })
+}
+
+/**
  * Everything readable out of what storage gave back.
  *
  * Storage is not trusted: a record can be from an older version of this app, be

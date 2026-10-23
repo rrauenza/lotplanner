@@ -11,6 +11,7 @@ import {
   readSaved,
   withSaved,
   withRenamed,
+  withImported,
   savedWith,
   withoutSaved,
   type SavedEffects,
@@ -162,6 +163,51 @@ describe('the Layouts a Site holds', () => {
     expect(nextName([entry('a', 'Layout 1'), entry('b', 'Layout 2'), entry('c', 'Layout 4')])).toBe(
       'Layout 5',
     )
+  })
+})
+
+describe('an imported Layout joins a Site work', () => {
+  it('is added as a named Layout, and leaves the existing work byte for byte', () => {
+    const before = [entry('a', 'First'), entry('b', 'Second')]
+    const after = withImported(before, laid(), 'Option A', 'imported')
+
+    expect(after.map((each) => each.name)).toEqual(['Option A', 'First', 'Second'])
+    expect(savedWith(after, 'imported')?.layout).toEqual(laid())
+    // The proof that nothing already here moved: the same two records, whole.
+    expect(after.slice(1)).toEqual(before)
+  })
+
+  it('suffixes a name already taken rather than adding two rows that read the same', () => {
+    const before = [entry('a', 'Option A')]
+
+    expect(withImported(before, laid(), 'Option A', 'i').map((each) => each.name)).toEqual([
+      'Option A (2)',
+      'Option A',
+    ])
+    // Case-insensitively, for the reason the reserved Collection name is.
+    expect(withImported(before, laid(), 'option a', 'i')[0]?.name).toBe('option a (2)')
+    // And a second suffixed one does not collide with the first.
+    const twice = withImported(
+      withImported(before, laid(), 'Option A', 'i1'),
+      laid(),
+      'Option A',
+      'i2',
+    )
+
+    expect(twice[0]?.name).toBe('Option A (3)')
+  })
+
+  it('names an import that arrived without a name, rather than leaving a blank row', () => {
+    expect(withImported([entry('a', 'Layout 1')], laid(), undefined, 'i')[0]?.name).toBe('Layout 2')
+    expect(withImported([], laid(), '', 'i')[0]?.name).toBe('Layout 1')
+    expect(withImported([], laid(), '   ', 'i')[0]?.name).toBe('Layout 1')
+  })
+
+  it('trims an overlong imported name rather than refusing a whole file over it', () => {
+    const long = 'x'.repeat(MAXIMUM_LAYOUT_NAME_LENGTH + 5)
+    const named = withImported([], laid(), long, 'i')
+
+    expect(named[0]?.name).toHaveLength(MAXIMUM_LAYOUT_NAME_LENGTH)
   })
 })
 
