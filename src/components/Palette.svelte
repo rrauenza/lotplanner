@@ -127,6 +127,9 @@
     display: flex;
     font: inherit;
     gap: 0.375rem;
+    /* A fingertip across: this is a target for a thumb on a phone, and it is
+       the only way to get a vehicle onto the ground. */
+    min-height: 2.5rem;
     padding: 0.25rem 0.5rem;
     /* Without this the page scrolls under the finger instead of the chip
        coming along with it, which is the whole interaction. */

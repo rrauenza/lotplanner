@@ -68,7 +68,7 @@ test('fits the map and its controls on a short phone without overlapping', async
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
 
   // Four vehicles, which is what grew the count panel enough to overflow.
-  const middle = await middleOf(await mapBox(page))
+  const middle = middleOf(await mapBox(page))
   await placeFromPalette(page, /Semi \+ 53 ft/, { x: middle.x - 60, y: middle.y - 40 })
   await placeFromPalette(page, /Coach/, { x: middle.x + 60, y: middle.y - 40 })
   await placeFromPalette(page, /SUV/, { x: middle.x - 60, y: middle.y + 40 })
@@ -195,25 +195,16 @@ test('picks a small vehicle up with a long press, and lets a jittery tap alone',
   await page.touchscreen.tap(away.x, away.y)
   await expect(page.locator('path.placement.selected')).toHaveCount(0)
 
-  await touchHoldDrag(
-    page,
-    middle,
-    { x: middle.x + 6, y: middle.y },
-    600,
-    3,
-    async () => {
-      await expect(page.locator('path.placement.picked-up')).toHaveCount(1)
-    },
-  )
+  await touchHoldDrag(page, middle, { x: middle.x + 6, y: middle.y }, 600, 3, async () => {
+    await expect(page.locator('path.placement.picked-up')).toHaveCount(1)
+  })
 
   await expect(page.locator('path.placement.selected')).toHaveCount(1)
   const carried = await boxOf(page, 'path.placement')
   expect(Math.abs(carried.x - before.x)).toBeGreaterThan(4)
 })
 
-test('freezes every vehicle with the lock, so every gesture pans the picture', async ({
-  page,
-}) => {
+test('freezes every vehicle with the lock, so every gesture pans the picture', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
@@ -246,8 +237,12 @@ test('freezes every vehicle with the lock, so every gesture pans the picture', a
 
   expect(Math.abs(pictureAfter.x - pictureBefore.x)).toBeGreaterThan(20)
   // The vehicle moved with the picture and not over it: same delta, no edit.
-  expect(Math.abs(vehicleAfter.x - vehicleBefore.x - (pictureAfter.x - pictureBefore.x))).toBeLessThan(1)
-  expect(Math.abs(vehicleAfter.y - vehicleBefore.y - (pictureAfter.y - pictureBefore.y))).toBeLessThan(1)
+  expect(
+    Math.abs(vehicleAfter.x - vehicleBefore.x - (pictureAfter.x - pictureBefore.x)),
+  ).toBeLessThan(1)
+  expect(
+    Math.abs(vehicleAfter.y - vehicleBefore.y - (pictureAfter.y - pictureBefore.y)),
+  ).toBeLessThan(1)
   await expect(page.locator('path.placement.selected')).toHaveCount(0)
 
   // Unlocked, the same press moves the vehicle rather than the picture.
@@ -331,4 +326,62 @@ test('pans and zooms with two fingers, even when one began on a vehicle', async 
 
   const narrow = await pictureBox(page)
   expect(narrow.width).toBeLessThan(wide.width * 0.95)
+})
+
+test('labels every control, and keeps the ones a thumb reaches for within reach', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+  await dragFromPalette(page, /Semi \+ 53 ft/, await middleOfTheMap(page))
+
+  // Everything but the map is a labelled thing with a name a screen reader can
+  // read out. The map is the exception, and is documented where it is built.
+  await expect(page.getByRole('navigation', { name: 'Places' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Vehicles' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Placed vehicles' })).toBeVisible()
+  await expect(page.getByLabel('Opacity')).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Layouts: / })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Redo' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Lock vehicles' })).toBeVisible()
+
+  // The row of actions a hand reaches for while working sits in the lower half
+  // of the phone, below the photograph, and each is a fingertip across rather
+  // than a mouse target.
+  for (const name of [/^Layouts: /, 'Undo', 'Redo', 'Lock vehicles']) {
+    const box = await page.getByRole('button', { name }).boundingBox()
+    expect(box).not.toBeNull()
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeGreaterThan(844 / 2)
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(38)
+  }
+
+  const chip = await page.getByRole('button', { name: /Semi \+ 53 ft/ }).boundingBox()
+  expect(chip).not.toBeNull()
+  expect(chip?.height ?? 0).toBeGreaterThanOrEqual(38)
+})
+
+test('puts a vehicle on the ground from the keyboard, since the map cannot be', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  // A palette chip takes focus and answers Enter like any button. A keyboard
+  // cannot drag a vehicle onto a piece of ground, so it goes to the middle of
+  // the frame - the app is operable without a pointer, and the map is the only
+  // part that is not.
+  await page.getByRole('button', { name: /Semi \+ 53 ft/ }).focus()
+  await page.keyboard.press('Enter')
+
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  const frame = await boxOf(page, 'path.frame-guide')
+  const placed = middleOf(await boxOf(page, 'path.placement'))
+  expect(Math.abs(placed.x - middleOf(frame).x)).toBeLessThan(4)
+  expect(Math.abs(placed.y - middleOf(frame).y)).toBeLessThan(4)
 })

@@ -733,6 +733,8 @@
   }
 
   nav button {
+    /* A fingertip across, like every other control a thumb reaches for. */
+    min-height: 2.5rem;
     padding: 0.5rem 0.75rem;
   }
 

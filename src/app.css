@@ -49,6 +49,10 @@ body {
 }
 
 .bar button {
+  /* A thumb, not a mouse: the row this is in is the one a hand holding the
+     phone reaches without shifting its grip, and a control has to be a
+     fingertip across to be worth putting there. */
+  min-height: 2.5rem;
   padding: 0.25rem 0.75rem;
 }
 

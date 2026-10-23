@@ -20,6 +20,15 @@ Under the photograph, a live count says how many of each vehicle are on the grou
 of them overlap; the overlapping pair are outlined on the picture as well. Opacity is one control for
 all of them, so an overlap can be read through.
 
+It is meant to be worked on a phone, held in one hand. The palette and the row of actions sit under
+the photograph, where a thumb reaches them; a vehicle's target is padded well past the drawn
+rectangle, so a car can be grabbed at any zoom; a press only becomes a move once the finger has
+travelled, or once a long press has picked the vehicle up; and the lock freezes every vehicle so that
+every gesture pans the picture. Two fingers always pan and zoom, which is the escape when the first
+one took hold of the wrong thing. Tapping a vehicle and then tapping the ground to let it go is two
+taps, not a double tap, because on this map a tap means select. Everything but the map is labelled
+and keyboard-operable; the map itself is pointer-driven, and is documented as such where it is built.
+
 Work is saved as it is edited, with no save button anywhere, and a place keeps as many named Layouts
 as you make for it: compare two options, come back to either, rename them, throw one away. A reload
 returns you to the one you were last working on. If the browser will not keep anything — private

@@ -128,9 +128,8 @@
    * can be told from a drag, which is what stops selecting a small vehicle from
    * nudging it.
    */
-  let pressing:
-    | { readonly id: string; readonly grab: Offset; readonly from: Point }
-    | undefined = undefined
+  let pressing: { readonly id: string; readonly grab: Offset; readonly from: Point } | undefined =
+    undefined
 
   /** The timer that turns a still press into a long press. */
   let holding: ReturnType<typeof setTimeout> | undefined = undefined
@@ -338,8 +337,7 @@
     const press = pressing
     if (
       press !== undefined &&
-      Math.hypot(event.clientX - press.from.x, event.clientY - press.from.y) >
-        PRESS_SLOP_PIXELS
+      Math.hypot(event.clientX - press.from.x, event.clientY - press.from.y) > PRESS_SLOP_PIXELS
     ) {
       // Travel, so it is a drag after all: the move is armed from where it was
       // taken hold of, and the press is done. The finger having come this far
