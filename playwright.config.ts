@@ -1,12 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const PORT = '4173'
+const PORT = process.env['PORT'] ?? '4173'
 const ORIGIN = `http://127.0.0.1:${PORT}`
 
 /**
  * The port and the base path are duplicated from `vite.config.ts` on purpose:
  * this file must not import the app's build config, and the duplication is
  * pinned by the fact that the suite fails loudly if they disagree.
+ *
+ * The port can be moved with `PORT=…`, because more than one checkout of this
+ * repository is often being tested at once. That matters more than it looks:
+ * `reuseExistingServer` below is on outside CI, so two suites sharing a port do
+ * not collide loudly - the second one quietly tests the first one's build.
  */
 export default defineConfig({
   testDir: './e2e',
