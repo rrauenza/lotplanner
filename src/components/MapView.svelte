@@ -506,9 +506,13 @@
 <style>
   .map {
     /* Fills what is left of the screen, so the photograph is the point of the
-       page rather than an illustration on it. */
-    flex: 1;
-    min-height: 20rem;
+       page rather than an illustration on it.
+       No floor of its own: the stage decides how tall the photograph may be,
+       and on a short phone the map gives way to the controls below it rather
+       than sitting on top of them. It was a `min-height` here that pushed the
+       Layouts row and the palette off a 390x664 screen. */
     background: #111;
+    flex: 1;
+    min-height: 0;
   }
 </style>
