@@ -12,7 +12,7 @@ import { dragFromPalette, middleOfTheMap, openTheSite, serveImagery, touchDrag }
  * rather than of what the palette offers.
  */
 
-/** The panel that says how many, and warns when two of them collide. */
+/** The panel that says how many, and warns when two of them overlap. */
 function placed(page: Page) {
   return page.getByRole('region', { name: 'Placed vehicles' })
 }
@@ -37,6 +37,29 @@ async function fillOpacities(page: Page): Promise<number[]> {
     [...document.querySelectorAll('path.placement')].map((path) =>
       Number(getComputedStyle(path).fillOpacity),
     ),
+  )
+}
+
+/** The colours a drawn vehicle's outline can come in. */
+const OVERLAP_RED = 'rgb(220, 38, 38)'
+const SELECTED_WHITE = 'rgb(255, 255, 255)'
+const ORDINARY_INK = 'rgb(27, 27, 27)'
+
+/**
+ * The outline each drawn vehicle actually wears: the stroke colour and width the
+ * browser computed on the `<path>`.
+ *
+ * A class name says what the code meant; this says what Leaflet painted, which
+ * is the same thing the sizes and angles are checked against rather than trusted
+ * from the source.
+ */
+async function strokes(page: Page): Promise<{ colour: string; width: number }[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('path.placement')].map((path) => {
+      const stroke = getComputedStyle(path)
+
+      return { colour: stroke.stroke, width: Number.parseFloat(stroke.strokeWidth) }
+    }),
   )
 }
 
@@ -73,21 +96,33 @@ test('marks two vehicles that cover each other, and stops when they are apart', 
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
 
   const drawn = page.locator('path.placement')
-  const colliding = page.locator('path.placement.overlapping')
+  const overlapping = page.locator('path.placement.overlapping')
   const clear = await clearOfTheForm(page)
 
   await dragFromPalette(page, /Semi \+ 53 ft/, clear)
   await expect(drawn).toHaveCount(1)
-  await expect(colliding).toHaveCount(0)
+  await expect(overlapping).toHaveCount(0)
   await expect(placed(page)).not.toContainText('overlap')
+
+  // Alone and selected, it wears selection's own outline: white, and wider than
+  // an ordinary vehicle's single pixel.
+  expect(await strokes(page)).toEqual([{ colour: SELECTED_WHITE, width: 3 }])
 
   // A second one let go in the same place lies over the first. Both are marked:
   // there is no telling which of two rectangles covering each other is the one
   // at fault, and both are what the visitor can see.
   await dragFromPalette(page, /Semi \+ 53 ft/, clear)
   await expect(drawn).toHaveCount(2)
-  await expect(colliding).toHaveCount(2)
+  await expect(overlapping).toHaveCount(2)
   await expect(placed(page)).toContainText('2 vehicles overlap')
+
+  // The mark is in the stroke itself and not only in the class: both take the
+  // warning red, and each keeps the width its channel decides - selection's
+  // three on the one just placed, and overlap's two on the one beneath it.
+  expect(await strokes(page)).toEqual([
+    { colour: OVERLAP_RED, width: 2 },
+    { colour: OVERLAP_RED, width: 3 },
+  ])
 
   // Let go of the selection, so that the finger finds the ground rather than the
   // form, and drag the top one clear of the other.
@@ -96,8 +131,16 @@ test('marks two vehicles that cover each other, and stops when they are apart', 
 
   await touchDrag(page, clear, { x: clear.x + 280, y: clear.y }, 12)
   await expect(drawn).toHaveCount(2)
-  await expect(colliding).toHaveCount(0)
+  await expect(overlapping).toHaveCount(0)
   await expect(placed(page)).not.toContainText('overlap')
+
+  // Apart, the red is gone from both: the one it left behind is back to an
+  // ordinary outline, and the one that was carried keeps selection's own - the
+  // mark changes with the cover rather than sitting on a vehicle permanently.
+  expect(await strokes(page)).toEqual([
+    { colour: ORDINARY_INK, width: 1 },
+    { colour: SELECTED_WHITE, width: 3 },
+  ])
 })
 
 test('does not call a copy parked beside the original an overlap', async ({ page }) => {

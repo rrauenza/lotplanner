@@ -28,6 +28,10 @@ _Avoid_: default collection, built-in collection
 A single instance of a Vehicle laid out on the map. One Vehicle may have many Placements.
 _Avoid_: instance, marker, pin
 
+**Overlap**:
+Two or more Placements covering some of the same ground. A shared edge is not an overlap: vehicles parked abreast or nose to tail fit, and only ground held in common counts.
+_Avoid_: collision, clash, conflict, intersection
+
 **Layout**:
 The arrangement of Placements at a Site, carrying its own copies of the Vehicles it uses. A Site keeps several of them as its saved work, and the name belongs to the saved work rather than to the arrangement.
 _Avoid_: plan, drawing

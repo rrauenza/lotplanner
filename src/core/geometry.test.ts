@@ -329,7 +329,7 @@ describe('overlaps', () => {
     // And turned, so the shared edge is one both of them computed at an angle:
     // once nose to tail, and once laid a width apart the way a duplicate is -
     // where the edge worked out twice comes back a hair into it and only the
-    // tolerance keeps it a touch rather than a collision.
+    // tolerance keeps it a touch rather than an overlap.
     const turned = { ...square, rotationDegrees: 90 }
     expect(overlaps(turned, { ...turned, centre: { eastMetres: 20, northMetres: 0 } })).toBe(false)
     expect(

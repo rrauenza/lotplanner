@@ -189,10 +189,11 @@ export interface LatLngBounds {
  * width, each a unit vector in ground metres.
  *
  * The basis everything else is built from, kept in one place so that anything
- * placed relative to a rectangle agrees with where the rectangle is drawn: a
- * corner of it, a duplicate beside it, the direction an overlap is looked for
- * along. A second copy of the sine and cosine would be a second opinion about
- * which way a rectangle faces.
+ * asked of a rectangle agrees with where the rectangle is drawn: a corner of it,
+ * a duplicate beside it, the point a finger is asked to be inside, the extent
+ * its picture is fetched for, the direction an overlap is looked for along. A
+ * second copy of the sine and cosine would be a second opinion about which way a
+ * rectangle faces.
  */
 function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
   const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
@@ -253,11 +254,11 @@ export function cornersOf(rectangle: OrientedRectangle): Offset[] {
  * Whether a point on the ground lies inside an oriented rectangle, optionally
  * with the rectangle grown by a padding first.
  *
- * The point is turned back by the rotation and then compared against the two
- * half-extents: the same arithmetic as drawing the rectangle, read backwards,
- * rather than a second opinion about where its edges are. A hit test that
- * disagrees with the drawing is a bug nobody sees until they try to grab
- * something.
+ * The point is turned back through the rectangle's own axes (`axesOf`), then
+ * compared against the two half-extents: the same basis the rectangle is drawn
+ * from, read backwards, rather than a second opinion about where its edges are.
+ * A hit test that disagrees with the drawing is a bug nobody sees until they try
+ * to grab something.
  *
  * The padding is for fingers. A vehicle is two metres wide and a fingertip is
  * not, and none of that has to change what is drawn.
@@ -267,16 +268,16 @@ export function containsPoint(
   point: Offset,
   paddingMetres = 0,
 ): boolean {
-  const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
+  const [along, across] = axesOf(rectangle)
   const east = point.eastMetres - rectangle.centre.eastMetres
   const north = point.northMetres - rectangle.centre.northMetres
 
-  const along = east * Math.sin(radians) + north * Math.cos(radians)
-  const across = east * Math.cos(radians) - north * Math.sin(radians)
+  const alongMetres = east * along.eastMetres + north * along.northMetres
+  const acrossMetres = east * across.eastMetres + north * across.northMetres
 
   return (
-    Math.abs(along) <= rectangle.lengthMetres / 2 + paddingMetres &&
-    Math.abs(across) <= rectangle.widthMetres / 2 + paddingMetres
+    Math.abs(alongMetres) <= rectangle.lengthMetres / 2 + paddingMetres &&
+    Math.abs(acrossMetres) <= rectangle.widthMetres / 2 + paddingMetres
   )
 }
 
@@ -357,18 +358,22 @@ function spanAlong(corners: readonly Offset[], axis: Offset): readonly [number, 
  * to be axis-aligned even when the frame is not, so the result is the bounding
  * box of the grown frame - which is why an angled frame fetches slightly more
  * than it strictly needs, in the corners.
+ *
+ * The axes come from the same place every other rectangle is read through
+ * (`axesOf`), so the box around a frame and the frame itself cannot disagree
+ * about which way it is turned.
  */
 export function extentAroundFrame(frame: SiteFrame, marginMetres: number): Extent {
-  const radians = frame.rotationDegrees * DEGREES_TO_RADIANS
+  const [along, across] = axesOf(frame)
   const halfLength = frame.lengthMetres / 2 + marginMetres
   const halfWidth = frame.widthMetres / 2 + marginMetres
 
   return {
     centre: frame.centre,
     halfEastMetres:
-      halfLength * Math.abs(Math.sin(radians)) + halfWidth * Math.abs(Math.cos(radians)),
+      halfLength * Math.abs(along.eastMetres) + halfWidth * Math.abs(across.eastMetres),
     halfNorthMetres:
-      halfLength * Math.abs(Math.cos(radians)) + halfWidth * Math.abs(Math.sin(radians)),
+      halfLength * Math.abs(along.northMetres) + halfWidth * Math.abs(across.northMetres),
   }
 }
 

@@ -35,12 +35,12 @@
   /**
    * The outline a vehicle wears when it covers part of another.
    *
-   * A red rather than a colour of its own: the fill is the vehicle's, and two
-   * things said in one channel say neither. Selection keeps the heavier outline
-   * it already had and its handle, so a selected collision is still readable as
-   * both.
+   * Overlap and selection are told apart by different channels rather than by
+   * one, so that a vehicle which is both is still readable as both. Overlap owns
+   * the colour, and this red is it. Selection owns the width, the handle and the
+   * open form. Nothing here asks the outline colour to say two things at once.
    */
-  const COLLISION_COLOUR = '#dc2626'
+  const OVERLAP_COLOUR = '#dc2626'
 
   interface Props {
     /** An object url for the picture, already fetched. */
@@ -392,7 +392,7 @@
 
     L.polygon(corners.map(toTuple), {
       className: `placement${selected ? ' selected' : ''}${overlapping ? ' overlapping' : ''}`,
-      color: overlapping ? COLLISION_COLOUR : selected ? '#ffffff' : '#1b1b1b',
+      color: overlapping ? OVERLAP_COLOUR : selected ? '#ffffff' : '#1b1b1b',
       weight: selected ? 3 : overlapping ? 2 : 1,
       fillColor: cssColour(placement.vehicle.colour),
       // The fill's opacity is not set here: it is the view's, and reaches every
@@ -506,7 +506,14 @@
     // flight included, so a vehicle carried over another is marked while it is
     // over it rather than only once the finger is lifted. The rectangles are the
     // ones drawn below, so the mark and the picture cannot disagree.
-    const colliding = overlappingIds(shown)
+    //
+    // Deliberately not the committed placements the count panel reads: that
+    // panel answers how many are *placed*, which is a fact about the Layout, and
+    // this answers what the picture is about to show, which follows the finger.
+    // During a drag the two therefore disagree until the finger lifts, and that
+    // is the point of each - a count that waited for the finger would lag, and a
+    // mark that waited for the commit would not mark what is drawn.
+    const overlapping = overlappingIds(shown)
 
     const drawAll = (): void => {
       into.clearLayers()
@@ -515,7 +522,7 @@
           cornersOf(rectangleOf(placement)).map((corner) => latLngFromOffset(origin, corner)),
           placement,
           placement.id === chosen,
-          colliding.has(placement.id),
+          overlapping.has(placement.id),
         )
       }
     }

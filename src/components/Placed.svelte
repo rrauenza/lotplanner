@@ -29,8 +29,17 @@
 
   const counts = $derived(countsByVehicle(placements))
 
-  /** How many of them cover some part of another. Never one: a pair is two. */
-  const colliding = $derived(overlappingIds(placements).size)
+  /**
+   * How many of them cover some part of another. Never one: a pair is two.
+   *
+   * Read from the committed Placements, unlike the outline the map draws, which
+   * is read from the placements it is about to draw - in-flight ones and all.
+   * The two therefore disagree during a drag, until the finger lifts and the
+   * move is committed. That is deliberate: this panel answers how many are
+   * *placed*, a fact about the Layout, while the map marks what is on the screen
+   * right then.
+   */
+  const overlapping = $derived(overlappingIds(placements).size)
 </script>
 
 <section class="placed" aria-label="Placed vehicles">
@@ -50,11 +59,11 @@
     </ul>
   {/if}
 
-  {#if colliding > 0}
+  {#if overlapping > 0}
     <!-- The vehicles that are in each other's way are outlined on the
          photograph. This says how many there are, which the outlines alone
          leave to be counted by eye. -->
-    <p class="collision">{colliding} vehicles overlap.</p>
+    <p class="overlap">{overlapping} vehicles overlap.</p>
   {/if}
 
   <label class="opacity">
@@ -78,6 +87,15 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+    /*
+     * Capped the way the palette caps itself. The photograph is the point of the
+     * page, and this panel is a row of chips under it that grows one line per
+     * distinct vehicle; without a cap a phone with a dozen vehicles placed wraps
+     * the list into several rows and eats the height the ground is being judged
+     * against. It scrolls rather than shrinks when it reaches that height.
+     */
+    max-height: 32vh;
+    overflow-y: auto;
   }
 
   h2 {
@@ -112,7 +130,7 @@
     margin: 0;
   }
 
-  .collision {
+  .overlap {
     font-size: 0.875rem;
     font-weight: 600;
     margin: 0;
