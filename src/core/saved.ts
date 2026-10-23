@@ -1,7 +1,7 @@
 import type { LatLng, LatLngBounds, Offset, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
 import { tidy } from './text'
-import type { Vehicle } from './vehicle'
+import { vehicle, type Vehicle } from './vehicle'
 
 /**
  * Work kept between visits.
@@ -22,10 +22,7 @@ import type { Vehicle } from './vehicle'
  * against a trivial fake rather than a browser.
  */
 
-/** How many Layouts one Site may hold. */
-export const SAVED_LIMIT = 40
-
-/** The longest a Layout's name may be. */
+/** The longest a Layout's name may be, which its box enforces too. */
 export const MAXIMUM_LAYOUT_NAME_LENGTH = 48
 
 /**
@@ -82,15 +79,11 @@ export function savedWith(
  * adding a second one under the same id, which is what makes saving on every
  * edit idempotent.
  */
-export function remembering(
+export function withSaved(
   saved: readonly SavedLayout[],
   entry: SavedLayout,
 ): readonly SavedLayout[] {
-  const others = saved.filter((each) => each.id !== entry.id)
-
-  // The oldest beyond the limit goes rather than the newest: running out of room
-  // is a reason to forget distant work, never a reason to refuse new work.
-  return [entry, ...others].slice(0, SAVED_LIMIT)
+  return [entry, ...saved.filter((each) => each.id !== entry.id)]
 }
 
 /**
@@ -99,7 +92,7 @@ export function remembering(
  * A name that tidies away to nothing leaves the old one in place: a row in a
  * list has to be readable, and "untitled" is not what anyone typed.
  */
-export function renamed(
+export function withRenamed(
   saved: readonly SavedLayout[],
   id: string,
   name: string,
@@ -114,7 +107,7 @@ export function renamed(
 }
 
 /** The same work without one Layout, which cannot break anything else. */
-export function without(saved: readonly SavedLayout[], id: string): readonly SavedLayout[] {
+export function withoutSaved(saved: readonly SavedLayout[], id: string): readonly SavedLayout[] {
   return saved.filter((each) => each.id !== id)
 }
 
@@ -162,7 +155,7 @@ export function readSaved(value: unknown): readonly SavedLayout[] {
     }
   }
 
-  return readable.slice(0, SAVED_LIMIT)
+  return readable
 }
 
 /** What a Site's storage holds, and whether it is being kept at all. */
@@ -178,7 +171,7 @@ export async function loadSaved(
 }
 
 /** Keeping the Site's work, reporting plainly when it could not be kept. */
-export async function keepSaved(
+export async function writeSaved(
   siteId: string,
   saved: readonly SavedLayout[],
   effects: SavedEffects,
@@ -278,6 +271,16 @@ function readPlacement(value: unknown): Placement | undefined {
   return { id, vehicle, centre, rotationDegrees }
 }
 
+/**
+ * A Vehicle as the domain makes one, out of fields that are at least the right
+ * primitive types.
+ *
+ * The rules about what a Vehicle may be - a name, a cap, a colour, dimensions
+ * that are whole inches - are not repeated here. They belong to the Vehicle, and
+ * the constructor is the only authority on them, so a record that holds
+ * something which is not a vehicle is dropped here for the same reason it could
+ * never have been created in the first place.
+ */
 function readVehicle(value: unknown): Vehicle | undefined {
   if (!isRecord(value)) {
     return undefined
@@ -287,16 +290,19 @@ function readVehicle(value: unknown): Vehicle | undefined {
 
   if (
     typeof name !== 'string' ||
-    name === '' ||
     typeof shortLabel !== 'string' ||
-    !isWholeAndPositive(widthInches) ||
-    !isWholeAndPositive(lengthInches) ||
-    !isNumber(colour)
+    !isNumber(widthInches) ||
+    !isNumber(lengthInches) ||
+    (typeof colour !== 'string' && !isNumber(colour))
   ) {
     return undefined
   }
 
-  return { name, shortLabel, widthInches, lengthInches, colour }
+  try {
+    return vehicle({ name, shortLabel, widthInches, lengthInches, colour })
+  } catch {
+    return undefined
+  }
 }
 
 function readOffset(value: unknown): Offset | undefined {
@@ -366,8 +372,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Finite, because a NaN that reached the map would draw nothing anywhere. */
 function isNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
-}
-
-function isWholeAndPositive(value: unknown): value is number {
-  return isNumber(value) && Number.isInteger(value) && value > 0
 }

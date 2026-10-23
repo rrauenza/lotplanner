@@ -29,12 +29,12 @@ A single instance of a Vehicle laid out on the map. One Vehicle may have many Pl
 _Avoid_: instance, marker, pin
 
 **Layout**:
-The arrangement of Placements at a Site, carrying its own copies of the Vehicles it uses. A Site keeps several, each under a name of its own.
+The arrangement of Placements at a Site, carrying its own copies of the Vehicles it uses. A Site keeps several of them as its saved work, and the name belongs to the saved work rather than to the arrangement.
 _Avoid_: plan, drawing
 
 **Saved work**:
 The named Layouts a Site keeps between visits, most recently worked on first. It lives in the browser, and it belongs to that person alone.
-_Avoid_: document, file, project, session
+_Avoid_: document, file, project
 
 **Editor**:
 A Layout together with the edits behind it and ahead of it — what an undo would reverse and what a redo would re-apply. It is memory, so it lasts for the session and no longer.

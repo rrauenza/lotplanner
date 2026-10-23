@@ -27,5 +27,8 @@ every gesture.
 - Because the stack is memory and nothing more, it lasts exactly as long as the session: a reload
   begins with nothing to undo. It is also capped, so a long afternoon of nudging one vehicle cannot
   grow without bound.
+- **Naming and choosing are not Layout edits.** A Layout's name, and which of a Site's Layouts is
+  open, belong to the saved work rather than to the arrangement (ADR 0008), so they are not on this
+  stack and undo does not reach them.
 - This is also why Collections stay out of the undo model — they are not edited in place while a
   Layout is open.

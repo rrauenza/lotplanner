@@ -4,16 +4,15 @@ import {
   KEPT,
   MAXIMUM_LAYOUT_NAME_LENGTH,
   NOTHING_KEPT,
-  SAVED_LIMIT,
-  keepSaved,
+  writeSaved,
   loadSaved,
   mostRecentOf,
   nextName,
   readSaved,
-  remembering,
-  renamed,
+  withSaved,
+  withRenamed,
   savedWith,
-  without,
+  withoutSaved,
   type SavedEffects,
   type SavedLayout,
 } from './saved'
@@ -93,52 +92,55 @@ class FakeStorage implements SavedEffects {
 
 describe('the Layouts a Site holds', () => {
   it('keeps a Layout at the front, which is the one that was just worked on', () => {
-    const kept = remembering(remembering([], entry('a', 'First')), entry('b', 'Second'))
+    const kept = withSaved(withSaved([], entry('a', 'First')), entry('b', 'Second'))
 
     expect(kept.map((each) => each.name)).toEqual(['Second', 'First'])
     expect(mostRecentOf(kept)?.name).toBe('Second')
   })
 
   it('replaces a Layout it already holds rather than adding a second one', () => {
-    const once = remembering([entry('a', 'First')], entry('a', 'First'))
-    const twice = remembering(once, { ...entry('a', 'First'), layout: laid() })
+    const once = withSaved([entry('a', 'First')], entry('a', 'First'))
+    const twice = withSaved(once, { ...entry('a', 'First'), layout: laid() })
 
     expect(twice).toHaveLength(1)
     expect(twice[0]?.id).toBe('a')
   })
 
-  it('forgets the oldest work rather than refusing new work when it is full', () => {
+  it('keeps every Layout it is given, however many there are', () => {
     let saved: readonly SavedLayout[] = []
 
-    for (let number = 0; number <= SAVED_LIMIT; number += 1) {
-      saved = remembering(saved, entry(`id-${String(number)}`, `Layout ${String(number)}`))
+    for (let number = 0; number < 60; number += 1) {
+      saved = withSaved(saved, entry(`id-${String(number)}`, `Layout ${String(number)}`))
     }
 
-    expect(saved).toHaveLength(SAVED_LIMIT)
-    expect(saved[0]?.id).toBe(`id-${String(SAVED_LIMIT)}`)
-    expect(saved.some((each) => each.id === 'id-0')).toBe(false)
+    // Nothing is quietly dropped. The only limit is what the browser will hold,
+    // and running out of room is reported rather than paid for with somebody's
+    // oldest work.
+    expect(saved).toHaveLength(60)
+    expect(saved[0]?.id).toBe('id-59')
+    expect(saved[59]?.id).toBe('id-0')
   })
 
   it('renames a Layout where it sits, and refuses a name that is not one', () => {
     const saved = [entry('a', 'First'), entry('b', 'Second')]
-    const named = renamed(saved, 'b', '  The   far   option ')
+    const named = withRenamed(saved, 'b', '  The   far   option ')
 
     expect(named.map((each) => each.name)).toEqual(['First', 'The far option'])
 
     // Whitespace and control characters only: the row has to stay readable, so
     // the old name stands rather than the list going blank.
-    expect(renamed(saved, 'b', ' \u0000\t ') === saved).toBe(true)
+    expect(withRenamed(saved, 'b', ' \u0000\t ') === saved).toBe(true)
   })
 
   it('trims an overlong name rather than refusing it', () => {
     const long = 'x'.repeat(MAXIMUM_LAYOUT_NAME_LENGTH + 20)
-    const named = renamed([entry('a', 'First')], 'a', long)
+    const named = withRenamed([entry('a', 'First')], 'a', long)
 
     expect(named[0]?.name).toHaveLength(MAXIMUM_LAYOUT_NAME_LENGTH)
   })
 
   it('takes a Layout away without touching the others', () => {
-    const left = without([entry('a', 'First'), entry('b', 'Second')], 'a')
+    const left = withoutSaved([entry('a', 'First'), entry('b', 'Second')], 'a')
 
     expect(left.map((each) => each.name)).toEqual(['Second'])
   })
@@ -236,12 +238,15 @@ describe('what storage gave back', () => {
     expect(readSaved('[]')).toEqual([])
   })
 
-  it('does not grow past the limit, even if storage was written by something that did', () => {
-    const crowded = Array.from({ length: SAVED_LIMIT + 5 }, (_, number) =>
+  it('reads a record of any length, whole and in the order it was written', () => {
+    const crowded = Array.from({ length: 60 }, (_, number) =>
       entry(`id-${String(number)}`, `Layout ${String(number)}`),
     )
+    const read = readSaved(crowded)
 
-    expect(readSaved(crowded)).toHaveLength(SAVED_LIMIT)
+    expect(read).toHaveLength(60)
+    expect(read[0]?.name).toBe('Layout 0')
+    expect(read[59]?.name).toBe('Layout 59')
   })
 })
 
@@ -263,7 +268,7 @@ describe('reaching storage', () => {
 
   it('keeps the Site work it is given, and says it did', async () => {
     const storage = new FakeStorage(undefined)
-    const saving = await keepSaved(SITE.id, [entry('a', 'First')], storage)
+    const saving = await writeSaved(SITE.id, [entry('a', 'First')], storage)
 
     expect(saving).toBe(KEPT)
     expect(storage.writes).toBe(1)
@@ -285,7 +290,7 @@ describe('reaching storage', () => {
     const storage = new FakeStorage(undefined)
     storage.fails = 'write'
 
-    const saving = await keepSaved(SITE.id, [entry('a', 'First')], storage)
+    const saving = await writeSaved(SITE.id, [entry('a', 'First')], storage)
 
     expect(saving.kept).toBe(false)
     expect(saving.kept ? '' : saving.message).toBe(NOTHING_KEPT)
@@ -293,7 +298,7 @@ describe('reaching storage', () => {
 
   it('goes through text on the way in, as a browser does', async () => {
     const storage = new FakeStorage(undefined)
-    await keepSaved(SITE.id, [entry('a', 'First')], storage)
+    await writeSaved(SITE.id, [entry('a', 'First')], storage)
 
     // What came back is plain data, so a Layout read back is a Layout and not a
     // reference to anything this tab was holding.

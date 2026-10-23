@@ -3,9 +3,6 @@
  * gestures. Both suites need the same ground and the same touch events, and a
  * second copy of a touch gesture is a second thing to get wrong, so there is
  * one.
- *
- * The fixture Site is the one in the manifest: a 137 m by 98 m frame at
- * rotation 90, on an origin at latitude 37.32.
  */
 
 import { expect, type Page } from '@playwright/test'

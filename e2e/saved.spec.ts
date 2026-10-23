@@ -52,6 +52,15 @@ async function storedKeys(page: Page): Promise<string[]> {
   return page.evaluate(() => Object.keys(localStorage).sort())
 }
 
+/** The Site's record as the browser holds it, if there is one yet. */
+async function savedRecord(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const key = Object.keys(localStorage).find((each) => each.includes('cupertino-sample'))
+
+    return key === undefined ? null : localStorage.getItem(key)
+  })
+}
+
 test('saves as it is edited, so a layout is not lost to a phone call', async ({ page }) => {
   await serveImagery(page)
   await openTheSite(page)
@@ -75,10 +84,10 @@ test('saves as it is edited, so a layout is not lost to a phone call', async ({ 
 
   await settled(page)
 
-  // One record for the Site, under a key named for it. (Storage holds the
-  // imagery credit too, which is somebody else's business.)
-  const savedKeys = (await storedKeys(page)).filter((key) => key.startsWith('lotplanner:saved:'))
-  expect(savedKeys).toEqual(['lotplanner:saved:cupertino-sample'])
+  // One record for this Site and no more, whatever the adapter calls it.
+  // (Storage holds the imagery credit too, which is somebody else's business.)
+  const siteKeys = (await storedKeys(page)).filter((key) => key.includes('cupertino-sample'))
+  expect(siteKeys).toHaveLength(1)
 
   await page.reload()
   await page.getByRole('button', { name: 'Cupertino sample' }).click()
@@ -96,29 +105,46 @@ test('keeps its own copies of the vehicles on it, corrections and all', async ({
   await openTheSite(page)
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
 
-  await placeOneVehicle(page)
+  const drawn = page.locator('path.placement')
+  const middle = await middleOfTheMap(page)
+
+  // Two of the same vehicle: the case that makes "the same vehicle" mean the
+  // same values rather than the same object, which is what a trip through
+  // storage takes away and has to leave working.
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: middle.x - 70, y: middle.y })
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: middle.x + 70, y: middle.y })
+  await expect(drawn).toHaveCount(2)
 
   const editor = page.getByRole('region', { name: 'The selected vehicle' })
   await editor.getByLabel('Width, feet').fill('13')
   await editor.getByLabel('Width, inches').fill('0')
   await expect(editor).toContainText(`70'0" by 13'0"`)
 
+  const before = await drawnSizes(page)
+  expect(before).toHaveLength(2)
+
   await settled(page)
   await page.reload()
   await page.getByRole('button', { name: 'Cupertino sample' }).click()
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+  await expect(drawn).toHaveCount(2)
 
-  // A Layout carries its own copy of each vehicle, so what comes back is what was
-  // corrected here rather than what any collection happens to say today.
-  const placed = await page.locator('path.placement').boundingBox()
+  // What came back is two copies of one vehicle, corrected: tapping either one
+  // and correcting it corrects both, exactly as it did before the reload.
+  const placed = await drawn.first().boundingBox()
   expect(placed).not.toBeNull()
 
-  const middle = middleOf(placed ?? { x: 0, y: 0, width: 0, height: 0 })
-  await page.touchscreen.tap(middle.x, middle.y)
-
+  const at = middleOf(placed ?? { x: 0, y: 0, width: 0, height: 0 })
+  await page.touchscreen.tap(at.x, at.y)
   await expect(editor.getByLabel('Width, feet')).toHaveValue('13')
-  await expect(editor.getByLabel('Width, inches')).toHaveValue('0')
-  await expect(editor).toContainText(`70'0" by 13'0"`)
+
+  await editor.getByLabel('Width, feet').fill('9')
+  await expect(editor).toContainText(`70'0" by 9'0"`)
+
+  const after = await drawnSizes(page)
+  expect(after).toHaveLength(2)
+  expect(Math.abs((after[0]?.height ?? 0) - (after[1]?.height ?? 0))).toBeLessThan(0.01)
+  expect((after[0]?.height ?? 0) < (before[0]?.height ?? 0)).toBe(true)
 })
 
 test('holds several named Layouts for one place, and opens each as it was', async ({ page }) => {
@@ -203,8 +229,11 @@ test('renames and deletes a saved Layout, and both stick', async ({ page }) => {
 
   await layouts(page).getByRole('button', { name: 'Delete', exact: true }).click()
   await layouts(page).getByRole('button', { name: 'Delete it' }).click()
-  await expect(layouts(page)).toContainText('Nothing saved here yet')
-  await closeLayouts(page)
+
+  // The sheet goes with the Layout it was showing, and the ground it was on is
+  // left blank rather than saved as an empty Layout.
+  await expect(layouts(page)).toHaveCount(0)
+  await expect(drawn).toHaveCount(0)
 
   await settled(page)
   await page.reload()
@@ -215,6 +244,48 @@ test('renames and deletes a saved Layout, and both stick', async ({ page }) => {
   await expect(drawn).toHaveCount(0)
   await openLayouts(page)
   await expect(layouts(page)).toContainText('Nothing saved here yet')
+})
+
+test('writes an edit before the page goes, rather than losing it', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  await placeOneVehicle(page)
+  await expect(drawn).toHaveCount(1)
+
+  // Waited for deliberately not at all: the write is not due for a moment yet,
+  // which is the state a phone call arrives in.
+  expect(await savedRecord(page)).toBeNull()
+
+  // A reload is the page being thrown away, and it has to write what is waiting
+  // on the way out.
+  await page.reload()
+  await page.getByRole('button', { name: 'Cupertino sample' }).click()
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  await expect(drawn).toHaveCount(1)
+  await expect(currentLayout(page)).toHaveAccessibleName('Layouts: Layout 1')
+})
+
+test('does not throw an unwritten edit away when the same place is chosen again', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const drawn = page.locator('path.placement')
+  await placeOneVehicle(page)
+  await expect(drawn).toHaveCount(1)
+
+  // Nothing is written yet, so reading the place back from storage now would
+  // find it empty and take the vehicle off the page with it.
+  expect(await savedRecord(page)).toBeNull()
+
+  await page.getByRole('button', { name: 'Cupertino sample' }).click()
+  await expect(drawn).toHaveCount(1)
 })
 
 test('opens a Layout fitted on the Site Frame, and restores no viewport', async ({ page }) => {

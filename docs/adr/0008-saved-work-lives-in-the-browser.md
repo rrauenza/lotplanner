@@ -25,6 +25,17 @@ rather than a broken one. What storage gives back is not trusted either — a re
 older version of this app, half-written, or put there by hand, so anything unreadable is dropped and
 the rest is used.
 
+**Nothing is dropped to make room.** There is no cap on how many Layouts a Site may hold: the
+browser's own quota is the limit, and a spent quota is reported the way any other refusal is, rather
+than paid for with somebody's oldest work. Deleting a Layout is the one destructive thing here, it
+cannot be undone, and so it asks first.
+
+**What is in memory is written at the last moment there is** — when the edits stop arriving, and
+again when the page is hidden or thrown away — because the phone call this is all for can arrive in
+the moment after an edit. Each edit carries the Site it belongs to rather than reading it back when
+the write happens, so editing one place and choosing another cannot write one place's work under the
+other's name.
+
 ## Considered options
 
 - **IndexedDB for the work as well as the picture.** One store, one mechanism, and room to spare.

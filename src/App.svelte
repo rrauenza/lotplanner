@@ -3,6 +3,7 @@
   import { loadAttribution } from './browser/attribution'
   import { imageryEffects } from './browser/imagery-store'
   import { savedEffects } from './browser/saved-store'
+  import Layouts from './components/Layouts.svelte'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
@@ -30,15 +31,14 @@
   } from './core/layout'
   import {
     KEPT,
-    MAXIMUM_LAYOUT_NAME_LENGTH,
-    keepSaved,
+    writeSaved,
     loadSaved,
     mostRecentOf,
     nextName,
-    remembering,
-    renamed,
+    withSaved,
+    withRenamed,
     savedWith,
-    without,
+    withoutSaved,
     type SavedLayout,
     type Saving,
   } from './core/saved'
@@ -77,18 +77,8 @@
   /** Whether what is on screen will survive the session, and what to say if not. */
   let saving = $state<Saving>(KEPT)
 
-  /** Whether the Layouts sheet is up, and which row is asking to be deleted. */
+  /** Whether the Layouts sheet is up. */
   let layoutsUp = $state(false)
-  let deleting = $state<string | undefined>(undefined)
-
-  /**
-   * The name box's own text while it is being typed in.
-   *
-   * A draft rather than the stored name, because a stored name is tidied as it
-   * arrives: binding the box straight to it would take the space out from
-   * between two words as they were typed.
-   */
-  let draftName = $state('')
 
   /**
    * How long edits settle before the Site's work is written. Long enough that
@@ -96,6 +86,17 @@
    * short enough that a phone call arriving costs nothing worth noticing.
    */
   const WRITE_AFTER_MILLISECONDS = 400
+
+  /**
+   * The Site whose work is waiting to be written, and the work itself.
+   *
+   * Both are taken when the edit is made rather than when the write happens:
+   * editing one place and choosing another is an ordinary thing to do, and the
+   * first place's work must not be written under the second place's name, nor
+   * lost. Each edit replaces what is waiting, so a run of edits is still one
+   * write and the last state is the one that goes.
+   */
+  let waiting: { readonly siteId: string; readonly work: readonly SavedLayout[] } | undefined
 
   let writing: ReturnType<typeof setTimeout> | undefined
 
@@ -125,7 +126,7 @@
     }
 
     editor = edit(editor, next)
-    keepInMind(next)
+    remember(next)
   }
 
   /**
@@ -135,11 +136,11 @@
    * Layout is named and listed the first time it is edited, so the list is never
    * showing something that is not there yet.
    */
-  function keepInMind(next: Layout): void {
+  function remember(next: Layout): void {
     const id = openId ?? crypto.randomUUID()
 
     openId = id
-    savedLayouts = remembering(savedLayouts, {
+    savedLayouts = withSaved(savedLayouts, {
       id,
       name: savedWith(savedLayouts, id)?.name ?? nextName(savedLayouts),
       layout: next,
@@ -149,20 +150,48 @@
 
   /** Write the Site's work once the edits stop arriving. */
   function writeWhenSettled(): void {
-    clearTimeout(writing)
-    writing = setTimeout(() => {
-      void keep()
-    }, WRITE_AFTER_MILLISECONDS)
-  }
-
-  async function keep(): Promise<void> {
     const current = site
 
     if (current === undefined) {
       return
     }
 
-    saving = await keepSaved(current.id, savedLayouts, savedEffects)
+    waiting = { siteId: current.id, work: savedLayouts }
+    clearTimeout(writing)
+    writing = setTimeout(() => {
+      void write()
+    }, WRITE_AFTER_MILLISECONDS)
+  }
+
+  /**
+   * Write what is waiting, now.
+   *
+   * Called when the edits stop arriving, and again when the page is about to be
+   * hidden or thrown away: the phone call this is all for can arrive in the four
+   * hundred milliseconds after an edit, and a last moment does exist to write in
+   * - local storage writes synchronously, so this finishes before the page goes.
+   */
+  async function write(): Promise<void> {
+    const pending = waiting
+
+    clearTimeout(writing)
+    waiting = undefined
+
+    if (pending === undefined) {
+      return
+    }
+
+    saving = await writeSaved(pending.siteId, pending.work, savedEffects)
+  }
+
+  function leaving(): void {
+    void write()
+  }
+
+  function hidden(): void {
+    if (document.visibilityState === 'hidden') {
+      void write()
+    }
   }
 
   /**
@@ -172,6 +201,13 @@
    * itself saved until something is put on it.
    */
   async function choose(choice: Site): Promise<void> {
+    // Choosing the place that is already open is not a reason to go back to
+    // storage: an edit made moments ago would be thrown off the page, and if the
+    // write had not happened yet it would be gone with it.
+    if (site?.id === choice.id) {
+      return
+    }
+
     site = choice
     selectedId = undefined
     layoutsUp = false
@@ -207,7 +243,7 @@
     layoutsUp = false
     // Opening one is working on it, so it goes to the front of the list - which
     // is what "open where I left off" means on the next visit.
-    savedLayouts = remembering(savedLayouts, chosen)
+    savedLayouts = withSaved(savedLayouts, chosen)
     writeWhenSettled()
     editor = startEditing(chosen.layout)
   }
@@ -228,20 +264,21 @@
 
   /** Rename the open Layout. A name that is not a name leaves the old one. */
   function renameOpen(name: string): void {
-    draftName = name
-
     if (openId === undefined) {
       return
     }
 
-    savedLayouts = renamed(savedLayouts, openId, name)
+    savedLayouts = withRenamed(savedLayouts, openId, name)
     writeWhenSettled()
   }
 
-  /** Open the Layouts sheet, starting its name box on the name in use. */
+  /** Open the Layouts sheet, and put it away again. */
   function showLayouts(): void {
-    draftName = openName
     layoutsUp = true
+  }
+
+  function closeLayouts(): void {
+    layoutsUp = false
   }
 
   /** Take one Layout out of the Site's saved work. */
@@ -252,8 +289,7 @@
       return
     }
 
-    savedLayouts = without(savedLayouts, id)
-    deleting = undefined
+    savedLayouts = withoutSaved(savedLayouts, id)
 
     // Deleting the one that is open leaves the most recent of what is left, or a
     // blank Layout - which is not saved until something is put on it, so the one
@@ -264,8 +300,8 @@
       openId = next?.id
       selectedId = undefined
       editor = startEditing(next?.layout ?? newLayout(current))
-      // The sheet stays up, so its name box follows what is open now.
-      draftName = openName
+      // The sheet goes with it: what it was showing is no longer there.
+      layoutsUp = false
     }
 
     writeWhenSettled()
@@ -290,7 +326,7 @@
     }
 
     editor = earlier
-    keepInMind(earlier.present)
+    remember(earlier.present)
     forgetADroppedSelection()
   }
 
@@ -308,7 +344,7 @@
     }
 
     editor = later
-    keepInMind(later.present)
+    remember(later.present)
     forgetADroppedSelection()
   }
 
@@ -502,7 +538,7 @@
   })
 </script>
 
-<svelte:window onkeydown={shortcut} />
+<svelte:window onkeydown={shortcut} onpagehide={leaving} onvisibilitychange={hidden} />
 
 <main>
   <header>
@@ -554,75 +590,20 @@
         <p class="notsaved" role="status">{saving.message}</p>
       {/if}
       {#if layoutsUp}
-        <!-- The Site's saved Layouts, one sheet at a time so that a list of
-             options for a place is read against the place itself. -->
-        <section class="sheet" aria-label="Layouts">
-          <div class="bar">
-            <h2>Layouts for {layout.siteName}</h2>
-            <button
-              type="button"
-              onclick={() => {
-                layoutsUp = false
-              }}>Done</button
-            >
-          </div>
-          <ul class="layouts">
-            {#each savedLayouts as one (one.id)}
-              <li>
-                <button
-                  type="button"
-                  aria-current={one.id === openId}
-                  onclick={() => {
-                    openLayout(one.id)
-                  }}
-                >
-                  {one.name}
-                </button>
-                {#if deleting === one.id}
-                  <button
-                    type="button"
-                    onclick={() => {
-                      deleteLayout(one.id)
-                    }}>Delete it</button
-                  >
-                  <button
-                    type="button"
-                    onclick={() => {
-                      deleting = undefined
-                    }}>Keep it</button
-                  >
-                {:else}
-                  <button
-                    type="button"
-                    onclick={() => {
-                      deleting = one.id
-                    }}>Delete</button
-                  >
-                {/if}
-              </li>
-            {:else}
-              <li>Nothing saved here yet. What you place is kept as you go.</li>
-            {/each}
-          </ul>
-          {#if openId !== undefined}
-            <label>
-              Name
-              <!-- Renamed as it is typed, into a draft of its own: a name is
-                   tidied as it arrives, so binding the box to the stored one
-                   would take the space out from between two words. -->
-              <input
-                value={draftName}
-                maxlength={MAXIMUM_LAYOUT_NAME_LENGTH}
-                oninput={(event) => {
-                  renameOpen(event.currentTarget.value)
-                }}
-              />
-            </label>
-          {/if}
-          <div class="bar">
-            <button type="button" onclick={startAnotherLayout}>New Layout</button>
-          </div>
-        </section>
+        <!-- The Site's saved Layouts. A sheet over the photograph for the same
+             reason the vehicle form is one: a list of options for a place is
+             read against the place itself, and opening it must not move the
+             ground under whoever is working on it. -->
+        <Layouts
+          saved={savedLayouts}
+          {openId}
+          {openName}
+          onopen={openLayout}
+          onrename={renameOpen}
+          ondelete={deleteLayout}
+          onnew={startAnotherLayout}
+          onclose={closeLayouts}
+        />
       {:else if selectedVehicle !== undefined}
         <!-- A sheet over the photograph rather than a row under it, so that
              opening the form never resizes the map - which would move the ground
@@ -713,70 +694,6 @@
     flex: 1;
     min-height: 0;
     position: relative;
-  }
-
-  .sheet {
-    background: Canvas;
-    border-radius: 0.375rem 0.375rem 0 0;
-    bottom: 0;
-    left: 0;
-    max-height: 60%;
-    overflow-y: auto;
-    padding: 0.5rem 0.75rem;
-    position: absolute;
-    right: 0;
-    /* Leaflet's panes carry z-indexes of their own and the map sets no stacking
-       context, so without this the sheet is drawn behind the photograph. Above
-       the panes, below the map's own controls. */
-    z-index: 800;
-  }
-
-  .bar {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .bar button {
-    padding: 0.25rem 0.75rem;
-  }
-
-  .bar h2 {
-    flex: 1;
-    font-size: 0.875rem;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .layouts {
-    list-style: none;
-    margin: 0 0 0.5rem;
-    padding: 0;
-  }
-
-  .layouts li {
-    align-items: center;
-    display: flex;
-    font-size: 0.875rem;
-    gap: 0.5rem;
-  }
-
-  .layouts li + li {
-    margin-top: 0.25rem;
-  }
-
-  .layouts li > button:first-child {
-    flex: 1;
-    text-align: left;
-  }
-
-  .layouts button {
-    padding: 0.25rem 0.5rem;
-  }
-
-  .layouts [aria-current='true'] {
-    font-weight: 600;
-    outline: 2px solid currentcolor;
   }
 
   .notsaved {
