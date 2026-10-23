@@ -121,6 +121,18 @@ function canonicalName(raw: string): string {
 }
 
 /**
+ * As much of a name as a short label can carry.
+ *
+ * The one place the default lives: a Vehicle made with no label gets this one,
+ * and anything that wants a label to follow a name afterwards - a form that has
+ * not had a label typed into it yet - asks for it here rather than repeating the
+ * rule and drifting from it.
+ */
+export function shortLabelFor(name: string): string {
+  return tidy(name).slice(0, MAXIMUM_SHORT_LABEL_LENGTH)
+}
+
+/**
  * Given, or else as much of the name as a narrow rectangle can carry.
  *
  * The spec asks for a short label that is optional, at most twelve characters,
@@ -133,7 +145,7 @@ function canonicalShortLabel(given: string | undefined, name: string): string {
   const collapsed = tidy(given ?? '')
 
   if (collapsed === '') {
-    return name.slice(0, MAXIMUM_SHORT_LABEL_LENGTH)
+    return shortLabelFor(name)
   }
   if (collapsed.length > MAXIMUM_SHORT_LABEL_LENGTH) {
     throw new Error(`A short label is at most ${String(MAXIMUM_SHORT_LABEL_LENGTH)} characters.`)

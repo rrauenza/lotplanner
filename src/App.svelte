@@ -1275,7 +1275,7 @@
              under whoever has just tapped a vehicle. Keyed on what is selected,
              so correcting one vehicle and then picking another starts afresh. -->
         {#key selectedId}
-          <div class="sheet">
+          <div class="sheet selection">
             <!-- What can be done with the vehicle that is selected. Turning is
                  not in here: that is the handle's job, and only the handle's. -->
             <div class="bar">
@@ -1425,6 +1425,15 @@
        390x664 screen it won and pushed the controls off the page. */
     min-height: 10rem;
     position: relative;
+  }
+
+  /* The selection form is the tallest sheet that floats over the map. Its top
+     must not cross the middle of the map, or a vehicle just placed at the centre
+     cannot be grabbed again: half the stage would put the top exactly on the
+     midpoint, so this stops short of it. Shorter content still takes its own
+     height; only a sheet that would have crossed is bounded and scrolls. */
+  .sheet.selection {
+    max-height: 45%;
   }
 
   .chrome {

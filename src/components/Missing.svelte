@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { cssColour } from '../core/colour'
-  import { toFeetAndInches } from '../core/units'
   import type { Vehicle } from '../core/vehicle'
+  import VehicleSummary from './VehicleSummary.svelte'
 
   /**
    * The vehicles an opened Layout uses that the visitor does not have.
@@ -22,11 +21,6 @@
   }
 
   let { missing, onadopt, ondecline }: Props = $props()
-
-  /** Read back the way a vehicle is published, so it can be recognised at a glance. */
-  function size(of: Vehicle): string {
-    return `${toFeetAndInches(of.lengthInches)} x ${toFeetAndInches(of.widthInches)}`
-  }
 </script>
 
 <section class="sheet" aria-label="Vehicles not in your collections">
@@ -42,9 +36,7 @@
   <ul class="vehicles">
     {#each missing as one, index (index)}
       <li>
-        <span class="swatch" style={`background: ${cssColour(one.colour)}`}></span>
-        <span>{one.name}</span>
-        <span class="size">{size(one)}</span>
+        <VehicleSummary of={one} />
       </li>
     {/each}
   </ul>
@@ -77,14 +69,5 @@
 
   .vehicles li + li {
     margin-top: 0.25rem;
-  }
-
-  .vehicles li > span:nth-child(2) {
-    flex: 1;
-  }
-
-  .size {
-    font-variant-numeric: tabular-nums;
-    opacity: 0.75;
   }
 </style>

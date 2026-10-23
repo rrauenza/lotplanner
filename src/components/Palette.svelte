@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { cssColour } from '../core/colour'
-  import { toFeetAndInches } from '../core/units'
   import {
     SYSTEM_COLLECTION,
     allCollections,
@@ -8,6 +6,8 @@
   } from '../core/vehicle-collection'
   import type { Vehicle } from '../core/vehicle'
   import { isDragStart, type Point } from './pointer'
+  import ReceivedFrom from './ReceivedFrom.svelte'
+  import VehicleSummary from './VehicleSummary.svelte'
 
   interface Props {
     /** The visitor's own collections, in the order they were made. */
@@ -37,11 +37,6 @@
 
   let carried: Vehicle | undefined = $state(undefined)
   let at = $state<Point>({ x: 0, y: 0 })
-
-  /** Read back the way a vehicle is published, so it can be checked at a glance. */
-  function size(of: Vehicle): string {
-    return `${toFeetAndInches(of.lengthInches)} x ${toFeetAndInches(of.widthInches)}`
-  }
 
   function picked(vehicle: Vehicle, event: PointerEvent): void {
     // One finger, one vehicle: a second finger, or anything but the left button,
@@ -103,7 +98,9 @@
     <!-- Where a received collection came from, said plainly so a visitor can
          tell their own work from somebody else's. A name, and nothing more:
          there are no accounts to say anything else about it. -->
-    <p class="source">Received from {shown.source}</p>
+    <div class="source">
+      <ReceivedFrom source={shown.source} />
+    </div>
   {/if}
 
   <ul>
@@ -126,9 +123,7 @@
             }
           }}
         >
-          <span class="swatch" style={`background: ${cssColour(vehicle.colour)}`}></span>
-          <span>{vehicle.name}</span>
-          <span class="size">{size(vehicle)}</span>
+          <VehicleSummary of={vehicle} />
         </button>
       </li>
     {:else}
@@ -180,9 +175,7 @@
   }
 
   .source {
-    font-size: 0.75rem;
     margin: 0 0 0.375rem;
-    opacity: 0.75;
   }
 
   ul {
@@ -214,11 +207,6 @@
     /* Without this the page scrolls under the finger instead of the chip
        coming along with it, which is the whole interaction. */
     touch-action: none;
-  }
-
-  .size {
-    font-variant-numeric: tabular-nums;
-    opacity: 0.75;
   }
 
   .ghost {

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { SYSTEM_COLLECTION_NAME } from '../core/collection'
-  import { cssColour } from '../core/colour'
-  import { toFeetAndInches } from '../core/units'
-  import { sameVehicle, vehicle, type Vehicle } from '../core/vehicle'
+  import { sameVehicle, shortLabelFor, vehicle, type Vehicle } from '../core/vehicle'
   import {
     MAXIMUM_COLLECTION_NAME_LENGTH,
     nameFor,
     type VehicleCollection,
   } from '../core/vehicle-collection'
+  import ReceivedFrom from './ReceivedFrom.svelte'
   import VehicleEditor from './VehicleEditor.svelte'
+  import VehicleSummary from './VehicleSummary.svelte'
 
   /**
    * The visitor's own collections: made, named, filled and deleted here.
@@ -120,10 +120,6 @@
     colour: '#6b7280',
   })
 
-  function size(of: Vehicle): string {
-    return `${toFeetAndInches(of.lengthInches)} x ${toFeetAndInches(of.widthInches)}`
-  }
-
   function renameTo(raw: string): void {
     draftName = raw
 
@@ -172,11 +168,7 @@
     // was. Say so here rather than letting the form quietly do nothing: the
     // visitor keeps the form open (still adding) so changing the name or colour
     // makes a distinct vehicle and it can be added.
-    if (
-      open.adding &&
-      shown !== undefined &&
-      shown.vehicles.some((one) => sameVehicle(one, next))
-    ) {
+    if (open.adding && shown?.vehicles.some((one) => sameVehicle(one, next))) {
       vehicleComplaint = ALREADY_IN_COLLECTION
       form = { inCollection: open.inCollection, of: next, adding: true }
       return
@@ -195,7 +187,7 @@
 
   function labelled(corrected: Vehicle): Vehicle {
     return corrected.shortLabel === A_NEW_VEHICLE.shortLabel
-      ? vehicle({ ...corrected, shortLabel: '' })
+      ? { ...corrected, shortLabel: shortLabelFor(corrected.name) }
       : corrected
   }
 
@@ -272,7 +264,9 @@
     {#if shown.source !== undefined}
       <!-- Where it came from, as the sender called it. A name, and nothing
            else: there are no accounts, so nothing else is known or claimed. -->
-      <p class="source">Received from {shown.source}</p>
+      <div class="source">
+        <ReceivedFrom source={shown.source} />
+      </div>
     {/if}
 
     <div class="bar">
@@ -294,9 +288,7 @@
     <ul class="vehicles">
       {#each shown.vehicles as one, index (index)}
         <li>
-          <span class="swatch" style={`background: ${cssColour(one.colour)}`}></span>
-          <span>{one.name}</span>
-          <span class="size">{size(one)}</span>
+          <VehicleSummary of={one} />
           <button
             type="button"
             onclick={() => {
@@ -392,9 +384,7 @@
   }
 
   .source {
-    font-size: 0.75rem;
     margin: 0.25rem 0 0;
-    opacity: 0.75;
   }
 
   [role='alert'] {
@@ -425,14 +415,5 @@
 
   .vehicles li + li {
     margin-top: 0.25rem;
-  }
-
-  .vehicles .size {
-    font-variant-numeric: tabular-nums;
-    opacity: 0.75;
-  }
-
-  .vehicles li > span:nth-child(2) {
-    flex: 1;
   }
 </style>

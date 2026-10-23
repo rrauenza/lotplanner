@@ -1,8 +1,6 @@
 <script lang="ts">
-  import { cssColour } from '../core/colour'
-  import { toFeetAndInches } from '../core/units'
-  import type { Vehicle } from '../core/vehicle'
   import type { ArrivedCollection } from '../core/vehicle-collection'
+  import VehicleSummary from './VehicleSummary.svelte'
 
   /**
    * A Vehicle Collection somebody shared by link.
@@ -24,11 +22,6 @@
   }
 
   let { collection, onkeep, ondecline }: Props = $props()
-
-  /** Read back the way a vehicle is published, so it can be recognised at a glance. */
-  function size(of: Vehicle): string {
-    return `${toFeetAndInches(of.lengthInches)} x ${toFeetAndInches(of.widthInches)}`
-  }
 </script>
 
 <section class="shared" aria-label="A shared collection">
@@ -44,9 +37,7 @@
   <ul class="vehicles">
     {#each collection.vehicles as one, index (index)}
       <li>
-        <span class="swatch" style={`background: ${cssColour(one.colour)}`}></span>
-        <span>{one.name}</span>
-        <span class="size">{size(one)}</span>
+        <VehicleSummary of={one} />
       </li>
     {:else}
       <li>Nothing in this collection.</li>
@@ -88,14 +79,5 @@
 
   .vehicles li + li {
     margin-top: 0.25rem;
-  }
-
-  .vehicles li > span:nth-child(2) {
-    flex: 1;
-  }
-
-  .size {
-    font-variant-numeric: tabular-nums;
-    opacity: 0.75;
   }
 </style>
