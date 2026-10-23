@@ -20,7 +20,7 @@
   import { type Arrival, importedFrom } from './core/arrival'
   import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
   import type { ArrivedCollection } from './core/codec'
-  import { extentForBounds, type Offset } from './core/geometry'
+  import { extentForBounds, type LatLngBounds, type Offset } from './core/geometry'
   import { encodeFile, fileNameFor } from './core/file'
   import { encodePayload } from './core/link'
   import { linkFor } from './core/route'
@@ -139,6 +139,18 @@
    * for it, which the guard in `choose` would otherwise mistake for a repeat.
    */
   let openedFromALink = $state(false)
+
+  /**
+   * The bounding box an arrived Layout carries, while it is the Site on screen.
+   *
+   * A shared or imported artifact carries the box its picture was planned from,
+   * so an arrival is planned from it rather than from its frame re-derived -
+   * which is the same picture only while both apps derive the extent the same
+   * way. Held as its own state rather than read from the open Layout so that the
+   * imagery plan does not change identity on every edit, which would reload the
+   * photograph each time something moved.
+   */
+  let arrivalBounds = $state<LatLngBounds | undefined>(undefined)
 
   /** The link just made, kept on screen so it can always be copied by hand. */
   let sharedLink = $state('')
@@ -266,17 +278,21 @@
    * apps derive the extent identically. A Site from the manifest has no carried
    * box, so it is planned as it always was.
    */
-  const plan = $derived(
-    site === undefined
-      ? undefined
-      : openedFromALink && layout !== undefined
-        ? imageryPlanForExtent(
-            layout.origin,
-            extentForBounds(layout.origin, layout.bounds),
-            USGS_NAIP_SERVICE_URL,
-          )
-        : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
-  )
+  const plan = $derived.by(() => {
+    const chosen = site
+
+    if (chosen === undefined) {
+      return undefined
+    }
+
+    return arrivalBounds === undefined
+      ? imageryPlanFor(chosen, USGS_NAIP_SERVICE_URL)
+      : imageryPlanForExtent(
+          chosen.origin,
+          extentForBounds(chosen.origin, arrivalBounds),
+          USGS_NAIP_SERVICE_URL,
+        )
+  })
 
   /**
    * Put an edit on the Editor. Every change to a Layout goes through here, which
@@ -519,6 +535,7 @@
     }
 
     openedFromALink = false
+    arrivalBounds = undefined
     site = choice
     selectedId = undefined
     layoutsUp = false
@@ -568,6 +585,7 @@
 
     site = arrived
     openedFromALink = true
+    arrivalBounds = shared.bounds
 
     const loaded = await loadSaved(arrived.id, savedEffects)
 
@@ -621,6 +639,7 @@
 
     site = arrived
     openedFromALink = true
+    arrivalBounds = layout.bounds
     selectedId = undefined
 
     // The Site already open has newer work in memory than storage does, so
