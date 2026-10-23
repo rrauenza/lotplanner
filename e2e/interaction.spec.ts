@@ -8,6 +8,7 @@ import {
   serveImagery,
   touchDrag,
   touchHoldDrag,
+  touchTwoFinger,
 } from './harness.js'
 
 /**
@@ -268,4 +269,66 @@ test('freezes every vehicle with the lock, so every gesture pans the picture', a
   expect(Math.abs(middleOf(moved).x - again.x)).toBeGreaterThan(50)
   expect(Math.abs(after.x - still.x)).toBeLessThan(2)
   await expect(page.locator('path.placement.selected')).toHaveCount(1)
+})
+
+test('pans and zooms with two fingers, even when one began on a vehicle', async ({ page }) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  // Everything here happens in the upper part of the map: a selection opens a
+  // sheet along the bottom, and a finger meant for the picture that lands on
+  // the sheet is a finger on a panel, not a gesture.
+  const map = await mapBox(page)
+  const drop = { x: middleOf(map).x, y: map.y + 70 }
+  await dragFromPalette(page, /Semi \+ 53 ft/, drop)
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  // A finger lands on the vehicle, as a mis-grab does, and only then does the
+  // second arrive. Both travel together and upward, so this is a pan that stays
+  // clear of the sheet the mis-grab opened.
+  const pictureBefore = await pictureBox(page)
+  const vehicleBefore = await boxOf(page, 'path.placement')
+  const onTheVehicle = middleOf(vehicleBefore)
+
+  await touchTwoFinger(
+    page,
+    onTheVehicle,
+    { x: onTheVehicle.x + 80, y: onTheVehicle.y - 30 },
+    { x: onTheVehicle.x + 120, y: onTheVehicle.y },
+    { x: onTheVehicle.x + 200, y: onTheVehicle.y - 30 },
+  )
+  // A pan flicked with the fingers glides for a moment.
+  await page.waitForTimeout(500)
+
+  const pictureAfter = await pictureBox(page)
+  const vehicleAfter = await boxOf(page, 'path.placement')
+
+  // The picture really moved...
+  expect(Math.abs(pictureAfter.x - pictureBefore.x)).toBeGreaterThan(20)
+  // ...and the vehicle moved with it rather than over it: the two-finger gesture
+  // is the escape, so nothing was carried off the ground it was on.
+  expect(
+    Math.abs(vehicleAfter.x - vehicleBefore.x - (pictureAfter.x - pictureBefore.x)),
+  ).toBeLessThan(1)
+  expect(
+    Math.abs(vehicleAfter.y - vehicleBefore.y - (pictureAfter.y - pictureBefore.y)),
+  ).toBeLessThan(1)
+
+  // Two fingers moving apart zoom in. The picture is as sharp as it can be shown
+  // when a place opens, so it is a pinch closed that has room to change the zoom.
+  const wide = await pictureBox(page)
+  const about = { x: middleOf(map).x, y: map.y + 60 }
+
+  await touchTwoFinger(
+    page,
+    { x: about.x - 120, y: about.y },
+    { x: about.x - 20, y: about.y },
+    { x: about.x + 120, y: about.y },
+    { x: about.x + 20, y: about.y },
+  )
+  await page.waitForTimeout(500)
+
+  const narrow = await pictureBox(page)
+  expect(narrow.width).toBeLessThan(wide.width * 0.95)
 })
