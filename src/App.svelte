@@ -1,12 +1,8 @@
 <script lang="ts">
   import { APP_TAGLINE, APP_TITLE } from './app-info'
   import { followAttribution } from './browser/attribution'
-  import { collectionEffects } from './browser/collections-store'
-  import { browserCompressor } from './browser/compression'
-  import { downloadFile, readFile } from './browser/files'
   import { imageryEffects } from './browser/imagery-store'
   import { savedEffects } from './browser/saved-store'
-  import { offerLink } from './browser/share'
   import { showPicture, type ShownPicture } from './browser/picture'
   import Collections from './components/Collections.svelte'
   import Layouts from './components/Layouts.svelte'
@@ -17,13 +13,9 @@
   import SharedCollection from './components/SharedCollection.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
-  import { type Arrival, importedFrom } from './core/arrival'
+  import type { Arrival } from './core/arrival'
   import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
-  import type { ArrivedCollection } from './core/codec'
   import { extentForBounds, type LatLngBounds, type Offset } from './core/geometry'
-  import { encodeFile, fileNameFor } from './core/file'
-  import { encodePayload } from './core/link'
-  import { linkFor } from './core/route'
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
@@ -61,24 +53,10 @@
   } from './core/saved'
   import type { Site } from './core/site'
   import type { Vehicle } from './core/vehicle'
-  import {
-    SYSTEM_COLLECTION,
-    adopted,
-    loadCollections,
-    mergedCollections,
-    missingFrom,
-    nextCollectionName,
-    received,
-    withCreated,
-    withEditedCollectionVehicle,
-    withRenamedCollection,
-    withVehicle,
-    withoutCollection,
-    withoutVehicle,
-    writeCollections,
-    type VehicleCollection,
-  } from './core/vehicle-collection'
+  import { missingFrom } from './core/vehicle-collection'
   import { SITES } from './manifest'
+  import { collections } from './state/collections.svelte'
+  import { sharing } from './state/sharing.svelte'
 
   /** The one thing the App asks of the map: where a screen point is on the ground. */
   interface MapHandle {
@@ -152,49 +130,11 @@
    */
   let arrivalBounds = $state<LatLngBounds | undefined>(undefined)
 
-  /** The link just made, kept on screen so it can always be copied by hand. */
-  let sharedLink = $state('')
-
-  /** What became of a share: handed to the system, copied, or neither. */
-  let sharing = $state('')
-
-  /**
-   * What became of an import, or what went wrong with one, in plain words.
-   *
-   * Kept after the work is done rather than only while it happens: an import
-   * that silently did nothing is the one outcome worth ruling out, so the answer
-   * stays on screen whether it was success or a refusal.
-   */
-  let importNotice = $state('')
-
   /** Whether what is on screen will survive the session, and what to say if not. */
   let saving = $state<Saving>(KEPT)
 
   /** Whether the Layouts sheet is up. */
   let layoutsUp = $state(false)
-
-  /**
-   * The visitor's own Vehicle Collections, or undefined until they have been
-   * read.
-   *
-   * Undefined rather than an empty list, so that the palette does not offer to
-   * make one before the read has finished - a collection made in that moment
-   * would be written over by the read's own answer.
-   */
-  let collections = $state<readonly VehicleCollection[] | undefined>(undefined)
-
-  /** Whether they will survive the session, and what to say if not. */
-  let collectionsSaving = $state<Saving>(KEPT)
-
-  /**
-   * Which collection the palette is showing, and which the Collections sheet is
-   * open on. A view of this session, like the opacity: nothing records it, and a
-   * reload starts on the System Collection.
-   */
-  let chosenCollection = $state(SYSTEM_COLLECTION.id)
-
-  /** Whether the Collections sheet is up. */
-  let collectionsUp = $state(false)
 
   /**
    * Whether the adoption offer has been put away for the Layout now open.
@@ -244,9 +184,6 @@
   let waiting: { readonly siteId: string; readonly work: readonly SavedLayout[] } | undefined
 
   let writing: ReturnType<typeof setTimeout> | undefined
-
-  /** The same, for the visitor's collections: one write once the edits stop. */
-  let collectionsWriting: ReturnType<typeof setTimeout> | undefined
 
   /** The name of the Layout being worked on, kept or not. */
   const openName = $derived(savedWith(savedLayouts, openId)?.name ?? nextName(savedLayouts))
@@ -365,157 +302,19 @@
 
   function leaving(): void {
     void write()
-    void writeCollectionsNow()
+    void collections.writeNow()
   }
 
   function hidden(): void {
     if (document.visibilityState === 'hidden') {
       void write()
-      void writeCollectionsNow()
+      void collections.writeNow()
     }
-  }
-
-  /**
-   * The visitor's collections, read once when the app opens.
-   *
-   * The read may have raced a collection made in the moment before it answered.
-   * Merging rather than replacing keeps both: replacing would discard stored
-   * work, and the next write would then persist only the new collection, losing
-   * everything that was there. The saving state is taken only when nothing has
-   * been made yet, so a late read cannot overwrite the success or refusal a write
-   * has already reported.
-   */
-  async function openCollections(): Promise<void> {
-    const loaded = await loadCollections(collectionEffects)
-
-    if (collections === undefined) {
-      collections = loaded.collections
-      collectionsSaving = loaded.saving
-      return
-    }
-
-    collections = mergedCollections(loaded.collections, collections)
-  }
-
-  /**
-   * Whether there is a change to the collections that has not been written.
-   *
-   * `pagehide` and `visibilitychange` fire on every tab switch and every
-   * navigation, and writing on each one would write the same list again for
-   * nothing. It also lets a late read's saving state overwrite the state a write
-   * had just set; guarding on this means a write happens only when there is
-   * something to write.
-   */
-  let collectionsChanged = false
-
-  /**
-   * The visitor's collections as they now stand, written shortly after.
-   *
-   * Kept in memory in the meantime, like a Layout's save: the same
-   * write-when-the-edits-stop shape, for the same reason - the phone call this
-   * is all for can arrive in the moment after an edit.
-   */
-  function keepCollections(next: readonly VehicleCollection[]): void {
-    collections = next
-    collectionsChanged = true
-    clearTimeout(collectionsWriting)
-    collectionsWriting = setTimeout(() => {
-      void writeCollectionsNow()
-    }, WRITE_AFTER_MILLISECONDS)
-  }
-
-  async function writeCollectionsNow(): Promise<void> {
-    clearTimeout(collectionsWriting)
-
-    if (collections === undefined || !collectionsChanged) {
-      return
-    }
-
-    collectionsChanged = false
-    collectionsSaving = await writeCollections(collections, collectionEffects)
-  }
-
-  /**
-   * A new collection, named for now and renamed as soon as it appears.
-   *
-   * The name is a placeholder that has to be a name: nothing here can guess what
-   * a fleet is for, and the box is right there next to the new row.
-   */
-  function createCollection(): void {
-    const made: VehicleCollection = {
-      id: crypto.randomUUID(),
-      name: nextCollectionName(collections ?? []),
-      vehicles: [],
-    }
-
-    keepCollections(withCreated(collections ?? [], made))
-    // Shown at once, so the palette and the sheet are looking at the new one
-    // rather than at whatever was chosen before it.
-    chosenCollection = made.id
-  }
-
-  function renameCollection(id: string, name: string): void {
-    keepCollections(withRenamedCollection(collections ?? [], id, name))
-  }
-
-  function deleteCollection(id: string): void {
-    keepCollections(withoutCollection(collections ?? [], id))
-
-    // The palette cannot show a collection that is not there any more.
-    if (chosenCollection === id) {
-      chosenCollection = SYSTEM_COLLECTION.id
-    }
-  }
-
-  function addVehicleToCollection(id: string, added: Vehicle): void {
-    keepCollections(withVehicle(collections ?? [], id, added))
-  }
-
-  function editVehicleInCollection(id: string, before: Vehicle, after: Vehicle): void {
-    keepCollections(withEditedCollectionVehicle(collections ?? [], id, before, after))
-  }
-
-  function removeVehicleFromCollection(id: string, removed: Vehicle): void {
-    keepCollections(withoutVehicle(collections ?? [], id, removed))
-  }
-
-  /**
-   * Take the open Layout's missing vehicles into one new collection.
-   *
-   * The vehicles become living copies of the visitor's own, and the Layout they
-   * came from is not touched: adopting is not a repair, because a Layout carries
-   * what it renders (ADR 0002). Choosing the new collection shows it in the
-   * palette at once, beside the name box it is renamed in.
-   */
-  function adoptMissing(): void {
-    const current = collections
-    const absent = missing
-
-    if (current === undefined || absent.length === 0) {
-      return
-    }
-
-    const made = adopted(current, absent, crypto.randomUUID())
-
-    keepCollections(withCreated(current, made))
-    chosenCollection = made.id
   }
 
   /** Put the offer away. The Layout renders and edits the same either way. */
   function declineAdoption(): void {
     adoptionDeclined = true
-  }
-
-  function chooseCollection(id: string): void {
-    chosenCollection = id
-  }
-
-  function showCollections(): void {
-    collectionsUp = true
-  }
-
-  function closeCollections(): void {
-    collectionsUp = false
   }
 
   /**
@@ -660,23 +459,8 @@
     saving = loaded.saving
     openId = id
     editor = startEditing(layout)
-    importNotice = `Imported "${savedWith(savedLayouts, id)?.name ?? 'a Layout'}" into ${layout.siteName}.`
+    sharing.notice = `Imported "${savedWith(savedLayouts, id)?.name ?? 'a Layout'}" into ${layout.siteName}.`
     writeWhenSettled()
-  }
-
-  /**
-   * Keep a Collection that arrived in a file.
-   *
-   * Through the same rule a shared one takes (issue #11): a fork with its own id,
-   * the arrived name recorded as provenance, so an import can never overwrite or
-   * merge into what is already here.
-   */
-  function importCollection(arrived: ArrivedCollection): void {
-    const made = received(collections ?? [], arrived, crypto.randomUUID())
-
-    keepCollections(withCreated(collections ?? [], made))
-    chosenCollection = made.id
-    importNotice = `Added "${made.name}" to your collections.`
   }
 
   /**
@@ -684,7 +468,8 @@
    *
    * The same fork a file import takes (issue #11): a new collection with its own
    * id, the arrived name as provenance, so it can never overwrite or merge into
-   * one the visitor already has.
+   * one the visitor already has. The keeping itself, and the notice it leaves,
+   * are the sharing module's; what is left here is only the offer's own answer.
    */
   function keepOfferedCollection(): void {
     const arrived = offered
@@ -694,28 +479,12 @@
     }
 
     offerAnswered = true
-    importCollection(arrived)
+    sharing.receive(arrived)
   }
 
   /** Leave the offered Collection: nothing of the visitor's own changes. */
   function declineOfferedCollection(): void {
     offerAnswered = true
-  }
-
-  /** Read a file the visitor chose, and do what it asks, saying plainly what happened. */
-  async function importFile(file: File): Promise<void> {
-    const imported = importedFrom(await readFile(file), { newId: () => crypto.randomUUID() })
-
-    if (imported.kind === 'declined') {
-      importNotice = imported.message
-      return
-    }
-    if (imported.kind === 'collection') {
-      importCollection(imported.collection)
-      return
-    }
-
-    await importLayout(imported.layout, imported.name)
   }
 
   /** The file input's answer, once the visitor has chosen something. */
@@ -728,36 +497,11 @@
     input.value = ''
 
     if (chosen !== undefined) {
-      void importFile(chosen)
+      // Reading the file, saying what became of it and keeping a Collection are
+      // the sharing module's; opening an imported Layout is the App's, because
+      // it is about a Site, so it is handed over rather than reached for.
+      void sharing.importFile(chosen, importLayout)
     }
-  }
-
-  /** Offer the open Layout as a file, named for what it is called here. */
-  function exportLayout(): void {
-    const current = layout
-
-    if (current === undefined) {
-      return
-    }
-
-    downloadFile(fileNameFor(openName), encodeFile({ kind: 'layout', layout: current }, openName))
-  }
-
-  /** Offer one of the visitor's Collections as a file. */
-  function exportCollection(id: string): void {
-    const chosen = (collections ?? []).find((each) => each.id === id)
-
-    if (chosen === undefined) {
-      return
-    }
-
-    downloadFile(
-      fileNameFor(chosen.name),
-      encodeFile({
-        kind: 'collection',
-        collection: { name: chosen.name, vehicles: chosen.vehicles },
-      }),
-    )
   }
 
   // A Layout that arrived in the link, opened once the component is up: an
@@ -769,29 +513,6 @@
       void openShared(arrival.layout)
     }
   })
-
-  /**
-   * Share the Layout on screen as a link.
-   *
-   * The link is built in the core and only handed out here: the phone's own
-   * share sheet first, then the clipboard, and the link itself on screen when
-   * neither is available. It is kept visible either way, because a share that
-   * silently did nothing is the one outcome worth ruling out.
-   */
-  async function share(): Promise<void> {
-    const current = layout
-
-    if (current === undefined) {
-      return
-    }
-
-    const payload = await encodePayload({ kind: 'layout', layout: current }, browserCompressor)
-    const link = linkFor(`${window.location.origin}${window.location.pathname}`, 'layout', payload)
-    const offered = await offerLink(link, openName)
-
-    sharedLink = link
-    sharing = offered.message
-  }
 
   /** Open one of the Site's saved Layouts. */
   function openLayout(id: string): void {
@@ -888,7 +609,11 @@
    * will be here tomorrow.
    */
   const unsaved = $derived(
-    saving.kept ? (collectionsSaving.kept ? undefined : collectionsSaving.message) : saving.message,
+    saving.kept
+      ? collections.saving.kept
+        ? undefined
+        : collections.saving.message
+      : saving.message,
   )
 
   /**
@@ -901,7 +626,9 @@
    * moment they are adopted.
    */
   const missing = $derived(
-    collections === undefined || layout === undefined ? [] : missingFrom(collections, layout),
+    collections.mine === undefined || layout === undefined
+      ? []
+      : missingFrom(collections.mine, layout),
   )
 
   function undoEdit(): void {
@@ -1143,7 +870,7 @@
 
   /** The visitor's collections are read once, as the app opens. */
   $effect(() => {
-    void openCollections()
+    void collections.open()
   })
 </script>
 
@@ -1175,10 +902,10 @@
     </div>
   </header>
 
-  {#if importNotice !== ''}
+  {#if sharing.notice !== ''}
     <!-- What became of the last import. Announced rather than thrown: a file
          that could not be read is an answer, and nothing already stored moved. -->
-    <p class="notice" role="status">{importNotice}</p>
+    <p class="notice" role="status">{sharing.notice}</p>
   {/if}
 
   {#if declined !== ''}
@@ -1241,38 +968,26 @@
              ground under whoever is working on it. -->
         <p class="notsaved" role="status">{unsaved}</p>
       {/if}
-      {#if sharedLink !== ''}
+      {#if sharing.link !== ''}
         <!-- Over the photograph too, and for the same reason: the link
              appearing must not resize the map. Shown whether or not the system
              took it, because a share that silently did nothing is the one
              outcome worth ruling out. -->
         <div class="sharing" aria-live="polite">
-          <p>{sharing}</p>
+          <p>{sharing.message}</p>
           <input
             readonly
-            value={sharedLink}
+            value={sharing.link}
             aria-label="Link to this Layout"
             onfocus={(event) => event.currentTarget.select()}
           />
         </div>
       {/if}
-      {#if collectionsUp}
+      {#if collections.up}
         <!-- The visitor's own collections, over the photograph for the same
              reason the Layouts sheet is: what a collection holds is read against
              the vehicles on the ground, and opening it must not resize the map. -->
-        <Collections
-          collections={collections ?? []}
-          chosen={chosenCollection}
-          onchoose={chooseCollection}
-          oncreate={createCollection}
-          onrename={renameCollection}
-          ondelete={deleteCollection}
-          onexport={exportCollection}
-          onaddvehicle={addVehicleToCollection}
-          oneditvehicle={editVehicleInCollection}
-          onremovevehicle={removeVehicleFromCollection}
-          onclose={closeCollections}
-        />
+        <Collections />
       {:else if layoutsUp}
         <!-- The Site's saved Layouts. A sheet over the photograph for the same
              reason the vehicle form is one: a list of options for a place is
@@ -1309,7 +1024,7 @@
              photograph for the same reason the other sheets are: opening it must
              not resize the map, because the report is read against the ground it
              is about. -->
-        <Missing {missing} onadopt={adoptMissing} ondecline={declineAdoption} />
+        <Missing {missing} onadopt={() => collections.adopt(missing)} ondecline={declineAdoption} />
       {/if}
     </div>
     <!-- Everything below the photograph, in one block that gives way on a short
@@ -1337,8 +1052,10 @@
         <button type="button" title="Ctrl, Shift and Z" disabled={!redoable} onclick={redoEdit}>
           Redo
         </button>
-        <button type="button" onclick={() => void share()}>Share</button>
-        <button type="button" onclick={exportLayout}>Export</button>
+        <button type="button" onclick={() => void sharing.share(layout, openName)}>Share</button>
+        <button type="button" onclick={() => sharing.exportLayout(layout, openName)}>
+          Export
+        </button>
         <!-- Freezes the vehicles so that every gesture pans the picture, for
              reviewing what is finished and for moving the view while placing
              many. A view of the session rather than part of the work, so it is
@@ -1354,14 +1071,7 @@
         </button>
       </div>
       <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
-      <Palette
-        collections={collections ?? []}
-        chosen={chosenCollection}
-        onchoose={chooseCollection}
-        onmanage={showCollections}
-        ondrop={dropFrom}
-        onplace={placeInTheMiddle}
-      />
+      <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
       <!-- Here even before it is known, so that the credit arriving cannot
            resize the map either. -->
       <p class="credit">{attribution}</p>

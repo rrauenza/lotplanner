@@ -1,30 +1,26 @@
 <script lang="ts">
-  import {
-    SYSTEM_COLLECTION,
-    allCollections,
-    type VehicleCollection,
-  } from '../core/vehicle-collection'
+  import { SYSTEM_COLLECTION, allCollections } from '../core/vehicle-collection'
   import type { Vehicle } from '../core/vehicle'
+  import { collections } from '../state/collections.svelte'
   import { isDragStart, type Point } from './pointer'
   import ReceivedFrom from './ReceivedFrom.svelte'
   import VehicleSummary from './VehicleSummary.svelte'
 
+  /**
+   * The palette presents the visitor's Collections, so it reads them from the
+   * one module that holds them rather than being handed them through the App:
+   * the tabs, the chosen one and the chips are the same list the Collections
+   * sheet edits. What is left as a prop is what belongs to the Site - dropping a
+   * vehicle on the map and placing one with no pointer behind it.
+   */
   interface Props {
-    /** The visitor's own collections, in the order they were made. */
-    collections: readonly VehicleCollection[]
-    /** Which one is being shown. A view of this session, never written down. */
-    chosen: string
-    /** Show another collection's vehicles. */
-    onchoose: (id: string) => void
-    /** Open the sheet that makes, names, fills and deletes collections. */
-    onmanage: () => void
     /** A vehicle was dragged off the palette and let go here. */
     ondrop: (vehicle: Vehicle, point: Point) => void
     /** A vehicle was chosen with no pointer behind it, so it goes somewhere sensible. */
     onplace: (vehicle: Vehicle) => void
   }
 
-  let { collections, chosen, onchoose, onmanage, ondrop, onplace }: Props = $props()
+  let { ondrop, onplace }: Props = $props()
 
   /**
    * What the palette is showing: the chosen collection, or the System Collection
@@ -32,7 +28,8 @@
    * empty, whichever collection was deleted underneath it.
    */
   const shown = $derived(
-    allCollections(collections).find((each) => each.id === chosen) ?? SYSTEM_COLLECTION,
+    allCollections(collections.mine ?? []).find((each) => each.id === collections.chosen) ??
+      SYSTEM_COLLECTION,
   )
 
   let carried: Vehicle | undefined = $state(undefined)
@@ -78,18 +75,23 @@
        Collection is always the first tab: it cannot be edited or deleted, and
        the palette is never empty because it is always one of the choices. -->
   <div class="collections">
-    {#each allCollections(collections) as collection (collection.id)}
+    {#each allCollections(collections.mine ?? []) as collection (collection.id)}
       <button
         type="button"
         aria-pressed={collection.id === shown.id}
         onclick={() => {
-          onchoose(collection.id)
+          collections.choose(collection.id)
         }}
       >
         {collection.name}
       </button>
     {/each}
-    <button type="button" onclick={onmanage}>Collections</button>
+    <button
+      type="button"
+      onclick={() => {
+        collections.show()
+      }}>Collections</button
+    >
   </div>
 
   <h2>{shown.name}</h2>

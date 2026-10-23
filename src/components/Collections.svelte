@@ -1,11 +1,9 @@
 <script lang="ts">
   import { SYSTEM_COLLECTION_NAME } from '../core/collection'
   import { sameVehicle, shortLabelFor, vehicle, type Vehicle } from '../core/vehicle'
-  import {
-    MAXIMUM_COLLECTION_NAME_LENGTH,
-    nameFor,
-    type VehicleCollection,
-  } from '../core/vehicle-collection'
+  import { MAXIMUM_COLLECTION_NAME_LENGTH, nameFor } from '../core/vehicle-collection'
+  import { collections } from '../state/collections.svelte'
+  import { sharing } from '../state/sharing.svelte'
   import ReceivedFrom from './ReceivedFrom.svelte'
   import VehicleEditor from './VehicleEditor.svelte'
   import VehicleSummary from './VehicleSummary.svelte'
@@ -16,41 +14,16 @@
    * The System Collection is not in any of this. It cannot be renamed, cannot
    * be deleted and its vehicles cannot be corrected, so it is not a row in this
    * sheet at all - there is nothing here to do to it.
+   *
+   * The Collections themselves are read from the module that holds them, not
+   * handed in through the App: this sheet edits the same list the palette
+   * presents, so making, renaming or deleting one here is seen there at once
+   * without the App in between. Offering one as a file is the sharing module's,
+   * for the same reason: it is not about a Site either.
    */
 
-  interface Props {
-    /** The visitor's own collections, in the order they were made. */
-    collections: readonly VehicleCollection[]
-    /** Which one the palette is showing, so the sheet opens on the same one. */
-    chosen: string
-    onchoose: (id: string) => void
-    oncreate: () => void
-    onrename: (id: string, name: string) => void
-    ondelete: (id: string) => void
-    /** Offer this collection as a file to keep or send. */
-    onexport: (id: string) => void
-    onaddvehicle: (id: string, vehicle: Vehicle) => void
-    oneditvehicle: (id: string, before: Vehicle, after: Vehicle) => void
-    onremovevehicle: (id: string, vehicle: Vehicle) => void
-    onclose: () => void
-  }
-
-  let {
-    collections,
-    chosen,
-    onchoose,
-    oncreate,
-    onrename,
-    ondelete,
-    onexport,
-    onaddvehicle,
-    oneditvehicle,
-    onremovevehicle,
-    onclose,
-  }: Props = $props()
-
   /** The collection whose details are open, if the palette is showing one of ours. */
-  const shown = $derived(collections.find((each) => each.id === chosen))
+  const shown = $derived((collections.mine ?? []).find((each) => each.id === collections.chosen))
 
   /** The row that has been asked to confirm, because deleting is not undoable. */
   let confirming = $state<string | undefined>(undefined)
@@ -135,7 +108,7 @@
     complaint = ''
 
     if (shown !== undefined) {
-      onrename(shown.id, named.name)
+      collections.rename(shown.id, named.name)
     }
   }
 
@@ -177,9 +150,9 @@
     vehicleComplaint = ''
 
     if (open.adding) {
-      onaddvehicle(open.inCollection, next)
+      collections.addVehicle(open.inCollection, next)
     } else {
-      oneditvehicle(open.inCollection, open.of, next)
+      collections.editVehicle(open.inCollection, open.of, next)
     }
 
     form = { inCollection: open.inCollection, of: next, adding: false }
@@ -193,22 +166,27 @@
 
   function show(id: string): void {
     form = undefined
-    onchoose(id)
+    collections.choose(id)
   }
 </script>
 
 <section class="sheet" aria-label="Your collections">
   <div class="bar">
     <h2>Your collections</h2>
-    <button type="button" onclick={onclose}>Done</button>
+    <button
+      type="button"
+      onclick={() => {
+        collections.close()
+      }}>Done</button
+    >
   </div>
 
   <ul class="own">
-    {#each collections as one (one.id)}
+    {#each collections.mine ?? [] as one (one.id)}
       <li>
         <button
           type="button"
-          aria-current={one.id === chosen}
+          aria-current={one.id === collections.chosen}
           onclick={() => {
             show(one.id)
           }}
@@ -220,7 +198,7 @@
             type="button"
             onclick={() => {
               confirming = undefined
-              ondelete(one.id)
+              collections.remove(one.id)
             }}>Delete it</button
           >
           <button
@@ -246,7 +224,12 @@
   </ul>
 
   <div class="bar">
-    <button type="button" onclick={oncreate}>New collection</button>
+    <button
+      type="button"
+      onclick={() => {
+        collections.create()
+      }}>New collection</button
+    >
   </div>
 
   {#if shown !== undefined}
@@ -275,7 +258,7 @@
       <button
         type="button"
         onclick={() => {
-          onexport(shown.id)
+          sharing.exportCollection(shown.id)
         }}>Export this collection</button
       >
     </div>
@@ -298,7 +281,7 @@
           <button
             type="button"
             onclick={() => {
-              onremovevehicle(shown.id, one)
+              collections.removeVehicle(shown.id, one)
             }}>Remove</button
           >
         </li>
