@@ -10,12 +10,15 @@ import type { GeocodingEffects } from '../core/geocoding'
  * nor downloads it.
  *
  * The usage policy is met without a key or a made-up identity. Identification:
- * the browser sends the page's own `Referer` on every cross-origin request
- * already, which names this app and where it is served, so no header is
- * grafted on. Pacing: the policy asks for at most about one request a second,
- * and the caller searches on submit rather than as someone types, so a person
- * cannot outpace it by typing. The core decides that pacing is the caller's job
- * (`GeocodingEffects`), and the creator form is the only caller there is.
+ * a cross-origin request carries the page's `Referer` under the browser's
+ * default referrer policy, which is this app's origin and nothing more - the
+ * page and its path are stripped - so it names who is asking without naming
+ * where in the app they are. That is enough for a keyless service, and no header
+ * is grafted on to say more. Pacing: the policy asks for at most about one
+ * request a second, and the caller searches on submit rather than as someone
+ * types, so a person cannot outpace it by typing. The core decides that pacing
+ * is the caller's job (`GeocodingEffects`), and the creator form is the only
+ * caller there is.
  *
  * Deliberately untested, along with the other adapters: a test here would be a
  * test of Nominatim and of `fetch`, and a real request would spend the shared

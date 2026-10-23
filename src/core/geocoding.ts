@@ -33,13 +33,14 @@ export interface Candidate {
 /**
  * What the geocoder has to be able to do.
  *
- * The adapter that answers this is the only code in the app that reaches a
+ * The adapter that answers this is to be the only code in the app that reaches a
  * third party, and it identifies the app the way a keyless service asks: with
- * the page's own referer, which the browser sends anyway, rather than with a
- * name grafted onto every request. The service publishes a pace of about one
- * search a second, which a tool used a few times a week meets without trying;
- * anything that asked repeatedly - a search as you type, say - would not, so
- * the pacing belongs to whoever calls this rather than here.
+ * the referer the browser sends cross-origin anyway, which names this app's
+ * origin, rather than with a name grafted onto every request. The service
+ * publishes a pace of about one search a second, which a tool used a few times a
+ * week meets without trying; anything that asked repeatedly - a search as you
+ * type, say - would not, so the pacing belongs to whoever calls this rather than
+ * here.
  */
 export interface GeocodingEffects {
   /** The geocoder's own answer, unread: what it means is decided below. */

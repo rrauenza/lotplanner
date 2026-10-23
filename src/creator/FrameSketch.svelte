@@ -29,9 +29,14 @@
    * what "draw a rectangle over the space" means, and the handles then reshape
    * what was drawn.
    *
-   * The picture is never refetched here. The image is fetched for the working
-   * area before this is mounted, and everything adjusted afterwards stays within
-   * what was already fetched, so adjusting costs nothing but the drag itself.
+   * The picture is never refetched here. The image is fetched for the Fetch Area
+   * before this is mounted and its edge is drawn as a guide, so the creator can
+   * see how far the photograph reaches. Nothing clamps the rectangle to that
+   * edge: a frame sketched near it can put the visitor's extent - the frame plus
+   * its context margin - past what was fetched. That is not broken, because the
+   * visitor's page simply fetches that extent; it is only worth knowing before
+   * sketching a frame against the edge of the open picture. Adjusting the
+   * rectangle itself costs nothing but the drag.
    */
 
   interface Props {
@@ -314,6 +319,18 @@
     const created = imageryMap(element, plan, imageUrl, origin)
 
     created.map.fitBounds(toBounds(plan.bounds), { padding: [24, 24] })
+
+    // The edge of the fetched picture, drawn so the creator can see how far the
+    // photograph reaches before sketching a frame near it. It is a guide and not
+    // a limit: what is outside it is simply not photographed yet.
+    L.rectangle(toBounds(plan.bounds), {
+      className: 'fetch-area-guide',
+      color: '#9ca3af',
+      weight: 1,
+      dashArray: '4 4',
+      fill: false,
+      interactive: false,
+    }).addTo(created.map)
 
     surface = created
 

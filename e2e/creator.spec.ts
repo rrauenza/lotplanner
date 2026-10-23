@@ -59,6 +59,10 @@ test('adds a place: find it, confirm it, draw it, turn it, emit it', async ({ pa
   await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
   await expect(page.getByText(ATTRIBUTION)).toBeVisible()
 
+  // The edge of the fetched picture is drawn as a guide, so the creator can see
+  // how far the photograph reaches before sketching a frame near it.
+  await expect(page.locator('path.fetch-area-guide')).toHaveCount(1)
+
   // Exactly one picture, fetched once for the whole session, sized to the
   // service's pixel cap at its own resolution, and not refetched while the
   // rectangle is adjusted below.
