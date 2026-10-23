@@ -194,8 +194,12 @@ export interface LatLngBounds {
  * its picture is fetched for, the direction an overlap is looked for along. A
  * second copy of the sine and cosine would be a second opinion about which way a
  * rectangle faces.
+ *
+ * Exported because the creator mode asks the same question of a frame it is
+ * reshaping: a corner dragged with the rectangle held at its own angle needs the
+ * two directions to measure the drag along, and those are these two.
  */
-function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
+export function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
   const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
 
   return [
