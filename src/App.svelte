@@ -63,6 +63,7 @@
     SYSTEM_COLLECTION,
     adopted,
     loadCollections,
+    mergedCollections,
     missingFrom,
     nextCollectionName,
     received,
@@ -329,17 +330,35 @@
   /**
    * The visitor's collections, read once when the app opens.
    *
-   * The read's answer is taken only if nothing has been made in the meantime, so
-   * that a collection made in the moment before storage answered cannot be
-   * written over by what storage held a moment before that.
+   * The read may have raced a collection made in the moment before it answered.
+   * Merging rather than replacing keeps both: replacing would discard stored
+   * work, and the next write would then persist only the new collection, losing
+   * everything that was there. The saving state is taken only when nothing has
+   * been made yet, so a late read cannot overwrite the success or refusal a write
+   * has already reported.
    */
   async function openCollections(): Promise<void> {
     const loaded = await loadCollections(collectionEffects)
 
-    collections ??= loaded.collections
+    if (collections === undefined) {
+      collections = loaded.collections
+      collectionsSaving = loaded.saving
+      return
+    }
 
-    collectionsSaving = loaded.saving
+    collections = mergedCollections(loaded.collections, collections)
   }
+
+  /**
+   * Whether there is a change to the collections that has not been written.
+   *
+   * `pagehide` and `visibilitychange` fire on every tab switch and every
+   * navigation, and writing on each one would write the same list again for
+   * nothing. It also lets a late read's saving state overwrite the state a write
+   * had just set; guarding on this means a write happens only when there is
+   * something to write.
+   */
+  let collectionsChanged = false
 
   /**
    * The visitor's collections as they now stand, written shortly after.
@@ -350,6 +369,7 @@
    */
   function keepCollections(next: readonly VehicleCollection[]): void {
     collections = next
+    collectionsChanged = true
     clearTimeout(collectionsWriting)
     collectionsWriting = setTimeout(() => {
       void writeCollectionsNow()
@@ -359,10 +379,11 @@
   async function writeCollectionsNow(): Promise<void> {
     clearTimeout(collectionsWriting)
 
-    if (collections === undefined) {
+    if (collections === undefined || !collectionsChanged) {
       return
     }
 
+    collectionsChanged = false
     collectionsSaving = await writeCollections(collections, collectionEffects)
   }
 

@@ -62,6 +62,27 @@ export function allCollections(mine: readonly VehicleCollection[]): readonly Veh
 }
 
 /**
+ * The visitor's collections after a read that raced an edit.
+ *
+ * The read of what storage holds starts when the app opens; a collection made in
+ * the moment before it answers is not yet in what storage holds. Taking the
+ * read's answer alone would discard that collection (and the next write would
+ * persist only it, losing everything stored); taking the in-memory list alone
+ * would discard the stored work. So both are kept, stored work first and what
+ * was made in the meantime after it, which is the order they were made in. A
+ * collection storage already held is not duplicated, and the in-memory view of
+ * one wins, because it is the more recent.
+ */
+export function mergedCollections(
+  stored: readonly VehicleCollection[],
+  made: readonly VehicleCollection[],
+): readonly VehicleCollection[] {
+  const overwritten = new Set(made.map((each) => each.id))
+
+  return [...stored.filter((each) => !overwritten.has(each.id)), ...made]
+}
+
+/**
  * What came of a name someone typed.
  *
  * A result rather than an exception, because a refused name is an ordinary thing

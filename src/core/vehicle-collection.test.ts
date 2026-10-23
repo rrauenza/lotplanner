@@ -13,6 +13,7 @@ import {
   allCollections,
   contentHash,
   loadCollections,
+  mergedCollections,
   missingFrom,
   nameFor,
   nextCollectionName,
@@ -175,6 +176,33 @@ describe("the System Collection among the visitor's own", () => {
 
   it("cannot be created as one of the visitor's own collections", () => {
     expect(withCreated([], SYSTEM_COLLECTION)).toEqual([])
+  })
+})
+
+describe('a read that raced an edit', () => {
+  it('keeps both what storage held and what was made while it was being read', () => {
+    const stored = [mine('a', 'Stored')]
+    const made = [mine('b', 'Made since')]
+
+    // Storage first, then what was made in the meantime, in that order - which is
+    // the order they were made in. Neither list is lost.
+    expect(mergedCollections(stored, made).map((each) => each.name)).toEqual([
+      'Stored',
+      'Made since',
+    ])
+  })
+
+  it('does not duplicate a collection storage already held', () => {
+    const shared = mine('a', 'Stored')
+
+    expect(mergedCollections([shared], [])).toEqual([shared])
+    // The in-memory view is the more recent, so it wins for one id.
+    expect(mergedCollections([shared], [mine('a', 'Renamed')])).toEqual([mine('a', 'Renamed')])
+  })
+
+  it('is the stored list when nothing was made, and the made list when storage was empty', () => {
+    expect(mergedCollections([mine('a', 'Stored')], [])).toEqual([mine('a', 'Stored')])
+    expect(mergedCollections([], [mine('b', 'Made')])).toEqual([mine('b', 'Made')])
   })
 })
 
