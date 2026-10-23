@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { arrivalFrom, COLLECTION_NOT_OPENED, importedFrom } from './arrival'
+import { arrivalFrom, importedFrom } from './arrival'
 import { CODEC_VERSION, encodeArtifact, type Artifact } from './codec'
 import { testCompressor } from './deflate-for-tests'
 import { encodeFile } from './file'
@@ -92,16 +92,30 @@ describe('what a page load is', () => {
     expect(arrived.kind === 'declined' ? arrived.message.length > 0 : false).toBe(true)
   })
 
-  it('declines a Collection link, which travels but has nowhere to land yet', async () => {
+  it('is the shared Collection for a link that carries one, offered rather than kept', async () => {
     const payload = await encodePayload(
       { kind: 'collection', collection: { name: 'Yard', vehicles: [SEMI] } },
       testCompressor,
     )
 
+    // Nothing of the recipient's is written by the arrival itself: it comes back
+    // as a Collection to offer, and only a deliberate action keeps it.
     expect(await arrivalFrom(`#collection/${payload}`, testCompressor)).toStrictEqual({
-      kind: 'declined',
-      message: COLLECTION_NOT_OPENED,
+      kind: 'collection',
+      collection: { name: 'Yard', vehicles: [SEMI] },
     })
+  })
+
+  it('refuses a link whose word and payload disagree about what it is', async () => {
+    // A `#layout/` word carrying a Collection's artifact: a broken link rather
+    // than something to guess at.
+    const payload = await encodePayload(
+      { kind: 'collection', collection: { name: 'Yard', vehicles: [SEMI] } },
+      testCompressor,
+    )
+    const arrived = await arrivalFrom(`#layout/${payload}`, testCompressor)
+
+    expect(arrived.kind).toBe('declined')
   })
 })
 

@@ -413,6 +413,29 @@ export function boundsForExtent(origin: LatLng, extent: Extent): LatLngBounds {
   }
 }
 
+/**
+ * The extent a picture covers, read back from the bounds that place it.
+ *
+ * The exact inverse of `boundsForExtent`, so a Layout that carries its own
+ * bounding box can be drawn on the photograph it was shared with rather than on
+ * one re-derived from its frame. Those two are the same only while every app
+ * derives the extent the same way, which is not something a shared artifact can
+ * assume.
+ */
+export function extentForBounds(origin: LatLng, bounds: LatLngBounds): Extent {
+  const southWest = offsetFromLatLng(origin, bounds.southWest)
+  const northEast = offsetFromLatLng(origin, bounds.northEast)
+
+  return {
+    centre: {
+      eastMetres: (southWest.eastMetres + northEast.eastMetres) / 2,
+      northMetres: (southWest.northMetres + northEast.northMetres) / 2,
+    },
+    halfEastMetres: Math.abs(northEast.eastMetres - southWest.eastMetres) / 2,
+    halfNorthMetres: Math.abs(northEast.northMetres - southWest.northMetres) / 2,
+  }
+}
+
 /** A rectangle in the Mercator plane, which is what an imagery `bbox` takes. */
 export interface MercatorBounds {
   readonly minX: number

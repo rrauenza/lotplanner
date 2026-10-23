@@ -44,5 +44,6 @@ keep in step, and the day they disagree is the day a visitor lands somewhere the
   is `src/core/arrival.ts`, tested beside it.
 - A link made with a newer version of the app opens, decodes, and is refused with a sentence rather than
   silently misread (ADR 0009).
-- A Collection link is recognised but has nowhere to land yet; it says so, and issue #14 gives
-  Collections their file and their opening screen.
+- A Collection link is recognised and opened: it is _offered_, because opening a link must not change
+  what the recipient has, and only a deliberate action forks the arrival into a new collection of
+  theirs (ADR 0002). A Collection arriving by file is the deliberate act already, so it is kept.

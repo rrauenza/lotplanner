@@ -53,6 +53,28 @@ async function savedRecord(page: Page): Promise<string | null> {
   })
 }
 
+/** The visitor's collections record as the browser holds it, if there is one. */
+async function collectionsRecord(page: Page): Promise<string | null> {
+  return page.evaluate(() => localStorage.getItem('lotplanner:collections'))
+}
+
+/**
+ * A `#collection/...` link carrying this collection, made the way the app makes
+ * one: the codec's own tuple shape, deflated raw and spelled as unpadded
+ * base64url. Compression comes from the platform API the app itself uses, so the
+ * payload is a real one rather than a fixture that only this test understands.
+ */
+async function collectionLink(collection: {
+  readonly name: string
+  readonly vehicles: readonly (readonly unknown[])[]
+}): Promise<string> {
+  const text = JSON.stringify(['collection', 1, collection.name, collection.vehicles])
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('deflate-raw'))
+  const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
+
+  return `#collection/${Buffer.from(bytes).toString('base64url')}`
+}
+
 /** The Layouts inside the Site's saved record. */
 async function savedLayouts(page: Page): Promise<unknown[]> {
   const record = await savedRecord(page)
@@ -205,4 +227,75 @@ test('a recipient can edit the arrangement and share it on again', async ({ brow
   await thirdContext.close()
   await recipientContext.close()
   await sender.context.close()
+})
+
+test('offers a shared Collection, and opening it changes nothing', async ({ page }) => {
+  await serveImagery(page)
+  await page.goto('./')
+
+  // The recipient already has a collection of their own, put there as a browser
+  // would hold one. Opening a link must not change it.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'lotplanner:collections',
+      JSON.stringify([{ id: 'mine', name: 'Mine', vehicles: [] }]),
+    ),
+  )
+  const before = await collectionsRecord(page)
+
+  const link = await collectionLink({
+    name: 'Fleet A',
+    vehicles: [['Tow truck', 'Tow', 96, 240, 0x6b7280]],
+  })
+
+  await page.goto(new URL(link, page.url()).href)
+
+  const offer = page.getByRole('region', { name: 'A shared collection' })
+  await expect(offer).toContainText('Fleet A')
+  await expect(offer).toContainText('Tow truck')
+
+  // Opening it, and declining it, write nothing: the offer is not the keeping.
+  await page.waitForTimeout(700)
+  expect(await collectionsRecord(page)).toBe(before)
+
+  await offer.getByRole('button', { name: 'Not now' }).click()
+  await expect(offer).toHaveCount(0)
+  expect(await collectionsRecord(page)).toBe(before)
+})
+
+test('keeps a shared Collection only when asked, as a fork', async ({ page }) => {
+  await serveImagery(page)
+  await page.goto('./')
+
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'lotplanner:collections',
+      JSON.stringify([{ id: 'mine', name: 'Mine', vehicles: [] }]),
+    ),
+  )
+
+  const link = await collectionLink({
+    name: 'Fleet A',
+    vehicles: [['Tow truck', 'Tow', 96, 240, 0x6b7280]],
+  })
+
+  await page.goto(new URL(link, page.url()).href)
+  await page
+    .getByRole('region', { name: 'A shared collection' })
+    .getByRole('button', { name: 'Add to my collections' })
+    .click()
+
+  // Kept through the same path a file import takes: a new collection beside the
+  // one the visitor had, carrying the name it came from.
+  await expect(page.locator('p.notice')).toContainText('Fleet A')
+  await page.waitForTimeout(700)
+
+  const after = JSON.parse((await collectionsRecord(page)) ?? '[]') as {
+    name: string
+    source?: string
+  }[]
+
+  expect(after).toHaveLength(2)
+  expect(after[0]?.name).toBe('Mine')
+  expect(after.find((each) => each.name === 'Fleet A')?.source).toBe('Fleet A')
 })

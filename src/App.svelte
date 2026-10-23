@@ -14,12 +14,13 @@
   import Missing from './components/Missing.svelte'
   import Palette from './components/Palette.svelte'
   import Placed from './components/Placed.svelte'
+  import SharedCollection from './components/SharedCollection.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
   import { type Arrival, importedFrom } from './core/arrival'
   import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
   import type { ArrivedCollection } from './core/codec'
-  import type { Offset } from './core/geometry'
+  import { extentForBounds, type Offset } from './core/geometry'
   import { encodeFile, fileNameFor } from './core/file'
   import { encodePayload } from './core/link'
   import { linkFor } from './core/route'
@@ -28,6 +29,7 @@
     IMAGERY_LOADING,
     IMAGERY_LOADING_MESSAGE,
     imageryPlanFor,
+    imageryPlanForExtent,
     loadImagery,
     USGS_NAIP_SERVICE_URL,
     type ImageryState,
@@ -92,6 +94,19 @@
 
   /** Why a link that arrived could not be opened, or nothing when none did. */
   const declined = $derived(arrival.kind === 'declined' ? arrival.message : '')
+
+  /**
+   * A Collection that arrived in a link, waiting to be kept or left.
+   *
+   * Opening the link is not keeping it: a shared link must never change what the
+   * recipient has (ADR 0002), so what arrives is offered, and only "Add to my
+   * collections" - the same fork a file import takes - writes anything. Answering
+   * either way puts the offer away.
+   */
+  let offerAnswered = $state(false)
+  const offered = $derived(
+    !offerAnswered && arrival.kind === 'collection' ? arrival.collection : undefined,
+  )
 
   let site: Site | undefined = $state(undefined)
 
@@ -241,9 +256,26 @@
    */
   let importInput = $state<HTMLInputElement | undefined>(undefined)
 
-  /** Everything about the chosen Site that arithmetic alone decides. */
+  /**
+   * Everything about the chosen Site that arithmetic alone decides.
+   *
+   * A Site that arrived - by link or file - is planned from the Layout's own
+   * bounding box rather than from its frame plus a margin. The artifact carries
+   * the box precisely so the recipient sees the photograph the sender saw; using
+   * it is what makes "the same photograph" true rather than true only while both
+   * apps derive the extent identically. A Site from the manifest has no carried
+   * box, so it is planned as it always was.
+   */
   const plan = $derived(
-    site === undefined ? undefined : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
+    site === undefined
+      ? undefined
+      : openedFromALink && layout !== undefined
+        ? imageryPlanForExtent(
+            layout.origin,
+            extentForBounds(layout.origin, layout.bounds),
+            USGS_NAIP_SERVICE_URL,
+          )
+        : imageryPlanFor(site, USGS_NAIP_SERVICE_URL),
   )
 
   /**
@@ -626,6 +658,29 @@
     keepCollections(withCreated(collections ?? [], made))
     chosenCollection = made.id
     importNotice = `Added "${made.name}" to your collections.`
+  }
+
+  /**
+   * Keep the Collection a shared link offered.
+   *
+   * The same fork a file import takes (issue #11): a new collection with its own
+   * id, the arrived name as provenance, so it can never overwrite or merge into
+   * one the visitor already has.
+   */
+  function keepOfferedCollection(): void {
+    const arrived = offered
+
+    if (arrived === undefined) {
+      return
+    }
+
+    offerAnswered = true
+    importCollection(arrived)
+  }
+
+  /** Leave the offered Collection: nothing of the visitor's own changes. */
+  function declineOfferedCollection(): void {
+    offerAnswered = true
   }
 
   /** Read a file the visitor chose, and do what it asks, saying plainly what happened. */
@@ -1108,6 +1163,18 @@
     <!-- A link that arrived but could not be opened. Announced rather than
          thrown: the visitor's own page is still here underneath it. -->
     <p class="notice" aria-live="polite">{declined}</p>
+  {/if}
+
+  {#if offered !== undefined}
+    <!-- A Collection a shared link carried. Offered rather than kept, because
+         opening a link must not change what the visitor has (ADR 0002); adding
+         it is a deliberate action and goes through the same fork a file import
+         takes. -->
+    <SharedCollection
+      collection={offered}
+      onkeep={keepOfferedCollection}
+      ondecline={declineOfferedCollection}
+    />
   {/if}
 
   <nav aria-label="Places">

@@ -7,6 +7,7 @@ import {
   containsPoint,
   cornersOf,
   extentAroundFrame,
+  extentForBounds,
   latLngFromOffset,
   mercatorBoundsForExtent,
   metresPerPixel,
@@ -474,6 +475,24 @@ describe('boundsForExtent', () => {
 
     expect(bounds.southWest.longitude).toBeCloseTo(0.005, 9)
     expect(bounds.northEast.longitude).toBeCloseTo(0.015, 9)
+  })
+})
+
+describe('extentForBounds', () => {
+  it('reads a bounding box back as the extent it was made from', () => {
+    const origin = { latitude: 37.32, longitude: -122.03 }
+    const extent = {
+      centre: { eastMetres: 12.5, northMetres: -7.25 },
+      halfEastMetres: 218.5,
+      halfNorthMetres: 199,
+    }
+
+    const read = extentForBounds(origin, boundsForExtent(origin, extent))
+
+    expect(read.centre.eastMetres).toBeCloseTo(extent.centre.eastMetres, 6)
+    expect(read.centre.northMetres).toBeCloseTo(extent.centre.northMetres, 6)
+    expect(read.halfEastMetres).toBeCloseTo(extent.halfEastMetres, 6)
+    expect(read.halfNorthMetres).toBeCloseTo(extent.halfNorthMetres, 6)
   })
 })
 

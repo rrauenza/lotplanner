@@ -41,7 +41,9 @@ values, not exceptions, so a caller cannot forget to handle them.
 
 - A link carries the whole artifact — Site identifier, name, georeference and bounding box, the Site
   Frame, and the Layout's own Vehicle copies — so it opens for a recipient with no account, no install
-  and none of the sender's collections (ADR 0002).
+  and none of the sender's collections (ADR 0002). The bounding box is not decoration: the recipient
+  plans the photograph from it, so the sender and the recipient are shown the same picture rather
+  than two pictures that merely happen to be derived the same way.
 - Placements carry no ids on the wire: an id is this session's handle on one, so the reader makes its
   own and saves the characters for the ground.
 - Files (issue #14) reuse the same codec and the same version discipline; only the compression and the
