@@ -14,8 +14,12 @@ and drag it around. Tapping a vehicle opens a form on it: name, label, width, le
 correcting any of them corrects every copy of that vehicle at once. A selection also carries a handle
 for turning it, which settles onto the angles of the space and of the vehicles already beside it, and
 buttons to duplicate it or delete it. Undo and redo work over every one of those edits, by button or
-by keyboard, and last for the session. Nothing is saved yet: a reload starts again from an empty piece
-of ground.
+by keyboard.
+
+Work is saved as it is edited, with no save button anywhere, and a place keeps as many named Layouts
+as you make for it: compare two options, come back to either, rename them, throw one away. A reload
+returns you to the one you were last working on. If the browser will not keep anything — private
+browsing, a full quota — the app says so and carries on in memory rather than refusing to start.
 
 - The domain vocabulary is in [`GLOSSARY.md`](./GLOSSARY.md).
 - The decisions and their reasons are in [`docs/adr/`](./docs/adr/).

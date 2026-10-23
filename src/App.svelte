@@ -2,6 +2,7 @@
   import { APP_TAGLINE, APP_TITLE } from './app-info'
   import { loadAttribution } from './browser/attribution'
   import { imageryEffects } from './browser/imagery-store'
+  import { savedEffects } from './browser/saved-store'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
@@ -27,6 +28,20 @@
     type Layout,
     type Placement,
   } from './core/layout'
+  import {
+    KEPT,
+    MAXIMUM_LAYOUT_NAME_LENGTH,
+    keepSaved,
+    loadSaved,
+    mostRecentOf,
+    nextName,
+    remembering,
+    renamed,
+    savedWith,
+    without,
+    type SavedLayout,
+    type Saving,
+  } from './core/saved'
   import type { Site } from './core/site'
   import type { Vehicle } from './core/vehicle'
   import { SITES } from './manifest'
@@ -47,6 +62,45 @@
 
   /** The Layout as it stands, if a Site has been opened. */
   const layout = $derived(editor?.present)
+
+  /**
+   * The Site's saved Layouts, the one worked on most recently first. This is the
+   * session's own list rather than a copy of what storage holds: storage is
+   * written behind it, so losing storage costs the work its future but not its
+   * shape, and the list goes on working.
+   */
+  let savedLayouts = $state<readonly SavedLayout[]>([])
+
+  /** Which of them is open. Nothing until an edit gives this Layout a name. */
+  let openId = $state<string | undefined>(undefined)
+
+  /** Whether what is on screen will survive the session, and what to say if not. */
+  let saving = $state<Saving>(KEPT)
+
+  /** Whether the Layouts sheet is up, and which row is asking to be deleted. */
+  let layoutsUp = $state(false)
+  let deleting = $state<string | undefined>(undefined)
+
+  /**
+   * The name box's own text while it is being typed in.
+   *
+   * A draft rather than the stored name, because a stored name is tidied as it
+   * arrives: binding the box straight to it would take the space out from
+   * between two words as they were typed.
+   */
+  let draftName = $state('')
+
+  /**
+   * How long edits settle before the Site's work is written. Long enough that
+   * typing a name into the form is one write rather than one per keystroke,
+   * short enough that a phone call arriving costs nothing worth noticing.
+   */
+  const WRITE_AFTER_MILLISECONDS = 400
+
+  let writing: ReturnType<typeof setTimeout> | undefined
+
+  /** The name of the Layout being worked on, kept or not. */
+  const openName = $derived(savedWith(savedLayouts, openId)?.name ?? nextName(savedLayouts))
   let selectedId: string | undefined = $state(undefined)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let attribution = $state('')
@@ -62,12 +116,159 @@
 
   /**
    * Put an edit on the Editor. Every change to a Layout goes through here, which
-   * is what makes undo work for all of them at once.
+   * is what makes undo work for all of them at once - and what makes saving
+   * automatic, since this is also where the work is kept.
    */
   function change(next: Layout): void {
-    if (editor !== undefined) {
-      editor = edit(editor, next)
+    if (editor === undefined) {
+      return
     }
+
+    editor = edit(editor, next)
+    keepInMind(next)
+  }
+
+  /**
+   * The open Layout as the Site's work, the moment it changes.
+   *
+   * In memory at once and written shortly after, rather than both on a delay: a
+   * Layout is named and listed the first time it is edited, so the list is never
+   * showing something that is not there yet.
+   */
+  function keepInMind(next: Layout): void {
+    const id = openId ?? crypto.randomUUID()
+
+    openId = id
+    savedLayouts = remembering(savedLayouts, {
+      id,
+      name: savedWith(savedLayouts, id)?.name ?? nextName(savedLayouts),
+      layout: next,
+    })
+    writeWhenSettled()
+  }
+
+  /** Write the Site's work once the edits stop arriving. */
+  function writeWhenSettled(): void {
+    clearTimeout(writing)
+    writing = setTimeout(() => {
+      void keep()
+    }, WRITE_AFTER_MILLISECONDS)
+  }
+
+  async function keep(): Promise<void> {
+    const current = site
+
+    if (current === undefined) {
+      return
+    }
+
+    saving = await keepSaved(current.id, savedLayouts, savedEffects)
+  }
+
+  /**
+   * The Site's saved work, opened where it was left.
+   *
+   * A Site with nothing saved starts on an empty piece of ground, which is not
+   * itself saved until something is put on it.
+   */
+  async function choose(choice: Site): Promise<void> {
+    site = choice
+    selectedId = undefined
+    layoutsUp = false
+
+    const loaded = await loadSaved(choice.id, savedEffects)
+
+    // The Site may have been chosen again while storage was being asked. By id
+    // rather than by identity: `$state` hands back a proxy, so the object read
+    // back is never the one that was put in.
+    if (site.id !== choice.id) {
+      return
+    }
+
+    savedLayouts = loaded.saved
+    saving = loaded.saving
+
+    const opening = mostRecentOf(loaded.saved)
+
+    openId = opening?.id
+    editor = startEditing(opening?.layout ?? newLayout(choice))
+  }
+
+  /** Open one of the Site's saved Layouts. */
+  function openLayout(id: string): void {
+    const chosen = savedWith(savedLayouts, id)
+
+    if (chosen === undefined) {
+      return
+    }
+
+    openId = chosen.id
+    selectedId = undefined
+    layoutsUp = false
+    // Opening one is working on it, so it goes to the front of the list - which
+    // is what "open where I left off" means on the next visit.
+    savedLayouts = remembering(savedLayouts, chosen)
+    writeWhenSettled()
+    editor = startEditing(chosen.layout)
+  }
+
+  /** Start another Layout for this Site, leaving the saved ones where they are. */
+  function startAnotherLayout(): void {
+    const current = site
+
+    if (current === undefined) {
+      return
+    }
+
+    openId = undefined
+    selectedId = undefined
+    layoutsUp = false
+    editor = startEditing(newLayout(current))
+  }
+
+  /** Rename the open Layout. A name that is not a name leaves the old one. */
+  function renameOpen(name: string): void {
+    draftName = name
+
+    if (openId === undefined) {
+      return
+    }
+
+    savedLayouts = renamed(savedLayouts, openId, name)
+    writeWhenSettled()
+  }
+
+  /** Open the Layouts sheet, starting its name box on the name in use. */
+  function showLayouts(): void {
+    draftName = openName
+    layoutsUp = true
+  }
+
+  /** Take one Layout out of the Site's saved work. */
+  function deleteLayout(id: string): void {
+    const current = site
+
+    if (current === undefined) {
+      return
+    }
+
+    savedLayouts = without(savedLayouts, id)
+    deleting = undefined
+
+    // Deleting the one that is open leaves the most recent of what is left, or a
+    // blank Layout - which is not saved until something is put on it, so the one
+    // just deleted does not come straight back.
+    if (openId === id) {
+      const next = mostRecentOf(savedLayouts)
+
+      openId = next?.id
+      selectedId = undefined
+      editor = startEditing(next?.layout ?? newLayout(current))
+      // The sheet stays up, so its name box follows what is open now.
+      draftName = openName
+    }
+
+    writeWhenSettled()
   }
 
   /** Whether there is anywhere to go back to, or forward to. */
@@ -75,17 +276,40 @@
   const redoable = $derived(editor !== undefined && canRedo(editor))
 
   function undoEdit(): void {
-    if (editor !== undefined) {
-      editor = undo(editor)
-      forgetADroppedSelection()
+    const current = editor
+
+    if (current === undefined) {
+      return
     }
+
+    const earlier = undo(current)
+
+    // Nowhere to go: nothing has changed, so there is nothing to keep either.
+    if (earlier === current) {
+      return
+    }
+
+    editor = earlier
+    keepInMind(earlier.present)
+    forgetADroppedSelection()
   }
 
   function redoEdit(): void {
-    if (editor !== undefined) {
-      editor = redo(editor)
-      forgetADroppedSelection()
+    const current = editor
+
+    if (current === undefined) {
+      return
     }
+
+    const later = redo(current)
+
+    if (later === current) {
+      return
+    }
+
+    editor = later
+    keepInMind(later.present)
+    forgetADroppedSelection()
   }
 
   /** A selection that is no longer on the ground is not a selection. */
@@ -143,14 +367,6 @@
     }
 
     change(withEditedVehicle(current, selected.vehicle, corrected))
-  }
-
-  function choose(choice: Site): void {
-    site = choice
-    // Nothing is stored yet, so opening a Site starts from the frame it was
-    // worked in and an empty piece of ground.
-    editor = startEditing(newLayout(choice))
-    selectedId = undefined
   }
 
   function place(vehicle: Vehicle, centre: Offset): void {
@@ -300,7 +516,7 @@
         type="button"
         aria-pressed={choice.id === site?.id}
         onclick={() => {
-          choose(choice)
+          void choose(choice)
         }}
       >
         {choice.name}
@@ -331,7 +547,83 @@
         onmove={movePlacement}
         onrotate={rotatePlacement}
       />
-      {#if selectedVehicle !== undefined}
+      {#if !saving.kept}
+        <!-- Over the photograph rather than in the column, for the reason the
+             sheets are: a notice arriving must not resize the map and move the
+             ground under whoever is working on it. -->
+        <p class="notsaved" role="status">{saving.message}</p>
+      {/if}
+      {#if layoutsUp}
+        <!-- The Site's saved Layouts, one sheet at a time so that a list of
+             options for a place is read against the place itself. -->
+        <section class="sheet" aria-label="Layouts">
+          <div class="bar">
+            <h2>Layouts for {layout.siteName}</h2>
+            <button
+              type="button"
+              onclick={() => {
+                layoutsUp = false
+              }}>Done</button
+            >
+          </div>
+          <ul class="layouts">
+            {#each savedLayouts as one (one.id)}
+              <li>
+                <button
+                  type="button"
+                  aria-current={one.id === openId}
+                  onclick={() => {
+                    openLayout(one.id)
+                  }}
+                >
+                  {one.name}
+                </button>
+                {#if deleting === one.id}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      deleteLayout(one.id)
+                    }}>Delete it</button
+                  >
+                  <button
+                    type="button"
+                    onclick={() => {
+                      deleting = undefined
+                    }}>Keep it</button
+                  >
+                {:else}
+                  <button
+                    type="button"
+                    onclick={() => {
+                      deleting = one.id
+                    }}>Delete</button
+                  >
+                {/if}
+              </li>
+            {:else}
+              <li>Nothing saved here yet. What you place is kept as you go.</li>
+            {/each}
+          </ul>
+          {#if openId !== undefined}
+            <label>
+              Name
+              <!-- Renamed as it is typed, into a draft of its own: a name is
+                   tidied as it arrives, so binding the box to the stored one
+                   would take the space out from between two words. -->
+              <input
+                value={draftName}
+                maxlength={MAXIMUM_LAYOUT_NAME_LENGTH}
+                oninput={(event) => {
+                  renameOpen(event.currentTarget.value)
+                }}
+              />
+            </label>
+          {/if}
+          <div class="bar">
+            <button type="button" onclick={startAnotherLayout}>New Layout</button>
+          </div>
+        </section>
+      {:else if selectedVehicle !== undefined}
         <!-- A sheet over the photograph rather than a row under it, so that
              opening the form never resizes the map - which would move the ground
              under whoever has just tapped a vehicle. Keyed on what is selected,
@@ -352,6 +644,17 @@
     <!-- Always reachable, and never inside the selection's sheet: undoing a
          delete has to be possible when nothing is selected any more. -->
     <div class="bar">
+      <!-- Which Layout this is, and the way to the others. Named for what it
+           opens rather than for itself, so that a screen reader is told what the
+           button is as well as what it currently says. -->
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={`Layouts: ${openName}`}
+        onclick={showLayouts}
+      >
+        {openName}
+      </button>
       <button type="button" title="Ctrl and Z" disabled={!undoable} onclick={undoEdit}>
         Undo
       </button>
@@ -436,6 +739,56 @@
 
   .bar button {
     padding: 0.25rem 0.75rem;
+  }
+
+  .bar h2 {
+    flex: 1;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .layouts {
+    list-style: none;
+    margin: 0 0 0.5rem;
+    padding: 0;
+  }
+
+  .layouts li {
+    align-items: center;
+    display: flex;
+    font-size: 0.875rem;
+    gap: 0.5rem;
+  }
+
+  .layouts li + li {
+    margin-top: 0.25rem;
+  }
+
+  .layouts li > button:first-child {
+    flex: 1;
+    text-align: left;
+  }
+
+  .layouts button {
+    padding: 0.25rem 0.5rem;
+  }
+
+  .layouts [aria-current='true'] {
+    font-weight: 600;
+    outline: 2px solid currentcolor;
+  }
+
+  .notsaved {
+    background: Canvas;
+    font-size: 0.75rem;
+    left: 0;
+    margin: 0;
+    padding: 0.25rem 0.5rem;
+    position: absolute;
+    right: 0;
+    top: 0;
+    z-index: 800;
   }
 
   .credit {

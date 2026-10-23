@@ -1,0 +1,55 @@
+---
+status: accepted
+---
+
+# Saved work lives in the browser, one record per Site
+
+Work is saved automatically as it is edited, and a Site holds several named Layouts, so options for
+the same place can sit side by side and a layout is not lost to a phone call. There is no account
+and no server, so the only place it can be kept is the browser.
+
+A Site's named Layouts are held in **one localStorage record per Site**, in the order they were
+worked on, most recent first. Layouts go to localStorage and the aerial photograph goes to IndexedDB
+(ADR 0001), which is the same decision made twice with the same reasoning: the picture is megabytes
+and the work is kilobytes. Storage is reached only through an injectable port, so the rules — naming,
+ordering, what happens when storage refuses — are tested in the core against a trivial fake, and the
+adapter that talks to a browser is exercised only end to end.
+
+**A Layout is the arrangement; a name and an identity belong to the saved work.** A Layout is the
+same piece of ground whether it is called "Option A" or nothing at all, so the name lives beside it
+rather than inside it, and a shared link carries the arrangement without a name (issue #13).
+
+Failure is never fatal. If storage will not be read, or will not be written, the app keeps the work
+in memory, says plainly that nothing will be saved, and carries on: a working tool with no memory
+rather than a broken one. What storage gives back is not trusted either — a record can be from an
+older version of this app, half-written, or put there by hand, so anything unreadable is dropped and
+the rest is used.
+
+## Considered options
+
+- **IndexedDB for the work as well as the picture.** One store, one mechanism, and room to spare.
+  Rejected because reading a Site's work would then be asynchronous through a database, for a few
+  kilobytes, before anything can be shown; and because the work wants the simplest thing that
+  survives a reload, which is a string under a key.
+- **One record per Layout, plus a record holding the order.** Closer to how the list is used, and
+  cheaper to write one Layout at a time. Rejected because the order _is_ part of the work — it is
+  what "open where I left off" means — and two records can disagree about it.
+- **A timestamp on each Layout and sorting by it.** The obvious way to say "most recent". Rejected
+  because the core has no clock and no randomness, and because keeping the list in working order
+  says the same thing without one.
+- **Refusing to start, or failing silently, when storage is unavailable.** Rejected: silently losing
+  someone's afternoon is the worst outcome available, and refusing to start over a cache is the
+  second worst. The spec asks for neither.
+- **Versioning the stored record now.** Wanted eventually, and the codec will carry a version field
+  when a Layout has to travel (issue #13). Here it is not yet needed, because the reader validates
+  what it finds and drops what it cannot read, which is what a version would be protecting against.
+
+## Consequences
+
+- Losing storage costs the work its future, not its present: the list, the naming and the editing
+  all keep working for as long as the tab is open.
+- The list is held in the session and written behind, rather than read back on every change, so the
+  interface never waits on storage to show what someone has just placed.
+- Work is keyed by Site, so a Site carries its own Layouts and nothing is shown against a place it
+  was not made for.
+- The adapters stay deliberately untested, and the rules they feed are covered instead.

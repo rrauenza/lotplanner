@@ -13,6 +13,7 @@
  */
 
 import { parseColour } from './colour'
+import { tidy } from './text'
 
 const MAXIMUM_NAME_LENGTH = 64
 const MAXIMUM_SHORT_LABEL_LENGTH = 12
@@ -71,16 +72,9 @@ export function sameVehicle(left: Vehicle, right: Vehicle): boolean {
   )
 }
 
-/**
- * Trimmed, with runs of whitespace collapsed to single spaces, so two names that
- * look the same are the same.
- *
- * Control characters go first, or they survive as whitespace and turn one name
- * into two. Composing after decomposing is what the spec asks for and is simply
- * NFC, which is the form that compares equal.
- */
+/** Trimmed, with runs of whitespace collapsed, so two names that look the same are the same. */
 function canonicalName(raw: string): string {
-  const collapsed = strippedOfControlCharacters(raw).trim().replace(/\s+/g, ' ')
+  const collapsed = tidy(raw)
 
   if (collapsed === '') {
     throw new Error('A vehicle needs a name.')
@@ -93,18 +87,6 @@ function canonicalName(raw: string): string {
 }
 
 /**
- * Control characters go before anything else, or they survive as whitespace and
- * turn one name into two. Composing after decomposing is what the spec asks for
- * and is simply NFC, which is the form that compares equal.
- */
-function strippedOfControlCharacters(raw: string): string {
-  // eslint-disable-next-line no-control-regex -- removing them is the point
-  const withoutControlCharacters = raw.replace(/[\u0000-\u001f\u007f]/g, '')
-
-  return withoutControlCharacters.normalize('NFD').normalize('NFC')
-}
-
-/**
  * Given, or else as much of the name as a narrow rectangle can carry.
  *
  * The spec asks for a short label that is optional, at most twelve characters,
@@ -114,7 +96,7 @@ function strippedOfControlCharacters(raw: string): string {
  * short stand-in for the places where the whole of it will not fit.
  */
 function canonicalShortLabel(given: string | undefined, name: string): string {
-  const collapsed = (given ?? '').trim().replace(/\s+/g, ' ')
+  const collapsed = tidy(given ?? '')
 
   if (collapsed === '') {
     return name.slice(0, MAXIMUM_SHORT_LABEL_LENGTH)
