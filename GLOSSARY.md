@@ -55,3 +55,11 @@ _Avoid_: document, file, project
 **Editor**:
 A Layout together with the edits behind it and ahead of it — what an undo would reverse and what a redo would re-apply. It is memory, so it lasts for the session and no longer.
 _Avoid_: history, state, session, document
+
+**Artifact**:
+A whole Layout or Vehicle Collection in the form it travels in — compact, versioned and self-contained, whether carried by a shared link or by a file. It is never a reference into somebody else's browser.
+_Avoid_: payload, blob, record, document
+
+**Shared link**:
+A URL whose fragment carries an Artifact, so it opens for anyone with no account and nothing installed. What it opens is a copy: nothing of the recipient's is read into it or written over.
+_Avoid_: share URL, deep link
