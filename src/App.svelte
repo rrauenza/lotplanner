@@ -1,8 +1,9 @@
 <script lang="ts">
   import { APP_TAGLINE, APP_TITLE } from './app-info'
-  import { loadAttribution } from './browser/attribution'
+  import { followAttribution } from './browser/attribution'
   import { imageryEffects } from './browser/imagery-store'
   import { savedEffects } from './browser/saved-store'
+  import { showPicture, type ShownPicture } from './browser/picture'
   import Layouts from './components/Layouts.svelte'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
@@ -14,6 +15,7 @@
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
+    IMAGERY_LOADING_MESSAGE,
     imageryPlanFor,
     loadImagery,
     USGS_NAIP_SERVICE_URL,
@@ -116,7 +118,7 @@
   let selectedId: string | undefined = $state(undefined)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let attribution = $state('')
-  let picture = $state('')
+  let picture = $state<ShownPicture | undefined>(undefined)
   // Raw, so that putting a component instance into state does not wrap it in a
   // proxy, which a Leaflet-backed component would not enjoy.
   let mapView = $state.raw<MapHandle | undefined>(undefined)
@@ -517,7 +519,7 @@
     }
 
     let abandoned = false
-    let objectUrl = ''
+    let shown: ShownPicture | undefined = undefined
 
     imagery = IMAGERY_LOADING
 
@@ -526,37 +528,23 @@
         return
       }
       if (next.status === 'ready') {
-        objectUrl = URL.createObjectURL(next.image)
-        picture = objectUrl
+        shown = showPicture(next.image)
+        picture = shown
       }
       imagery = next
     })
 
     return () => {
       abandoned = true
-      if (objectUrl !== '') {
-        URL.revokeObjectURL(objectUrl)
-      }
+      shown?.release()
     }
   })
 
-  $effect(() => {
-    let abandoned = false
-
-    void loadAttribution(USGS_NAIP_SERVICE_URL)
-      .then((text) => {
-        if (!abandoned) {
-          attribution = text
-        }
-      })
-      .catch(() => {
-        // No credit line beats a wrong one, and the picture still shows.
-      })
-
-    return () => {
-      abandoned = true
-    }
-  })
+  $effect(() =>
+    followAttribution(USGS_NAIP_SERVICE_URL, (text) => {
+      attribution = text
+    }),
+  )
 </script>
 
 <svelte:window onkeydown={shortcut} onpagehide={leaving} onvisibilitychange={hidden} />
@@ -584,17 +572,14 @@
   {#if imagery.status === 'idle'}
     <p>Pick a place to lay vehicles out in.</p>
   {:else if imagery.status === 'loading'}
-    <p role="status">
-      Fetching the photograph. The first visit to a place takes a few seconds; after that it is
-      instant.
-    </p>
+    <p role="status">{IMAGERY_LOADING_MESSAGE}</p>
   {:else if imagery.status === 'failed'}
     <p role="alert">{imagery.message}</p>
   {:else if plan !== undefined && layout !== undefined}
     <div class="stage">
       <MapView
         bind:this={mapView}
-        imageUrl={picture}
+        imageUrl={picture?.url ?? ''}
         {plan}
         origin={layout.origin}
         frame={layout.frame}

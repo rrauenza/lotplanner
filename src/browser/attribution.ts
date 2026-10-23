@@ -35,6 +35,32 @@ export async function loadAttribution(serviceUrl: string): Promise<string> {
   return attribution
 }
 
+/**
+ * The credit line, once it is known, and the way to stop caring about it.
+ *
+ * The shape an `$effect` wants: it returns the teardown, and nothing is set
+ * after the caller has gone. A credit line that cannot be read is not an error
+ * the picture should suffer for, so the failure is swallowed - the map shows
+ * either way.
+ */
+export function followAttribution(serviceUrl: string, receive: (text: string) => void): () => void {
+  let abandoned = false
+
+  void loadAttribution(serviceUrl)
+    .then((text) => {
+      if (!abandoned) {
+        receive(text)
+      }
+    })
+    .catch(() => {
+      // No credit line beats a wrong one, and the picture still shows.
+    })
+
+  return () => {
+    abandoned = true
+  }
+}
+
 function readRemembered(serviceUrl: string): string | null {
   try {
     return localStorage.getItem(`${REMEMBERED}.${serviceUrl}`)

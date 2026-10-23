@@ -200,6 +200,17 @@ export const IMAGERY_IDLE: ImageryState = { status: 'idle' }
 export const IMAGERY_LOADING: ImageryState = { status: 'loading' }
 
 /**
+ * What the app says while the one picture is on its way.
+ *
+ * The wait is 15-22 seconds the first time a place is opened and nothing at all
+ * afterwards, so the sentence has to explain both. It lives beside the states
+ * because the visitor's page and the creator's say the same thing about the
+ * same wait.
+ */
+export const IMAGERY_LOADING_MESSAGE =
+  'Fetching the photograph. The first visit to a place takes a few seconds; after that it is instant.'
+
+/**
  * Everything that reaches outside the app, passed in rather than reached for,
  * which is what lets the core be tested with three one-line fakes instead of a
  * mocking framework.

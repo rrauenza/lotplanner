@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
 
-  import { loadAttribution } from '../browser/attribution'
+  import { followAttribution } from '../browser/attribution'
   import { geocodingEffects } from '../browser/geocoder'
   import { imageryEffects } from '../browser/imagery-store'
+  import { showPicture, type ShownPicture } from '../browser/picture'
   import {
     findCandidates,
     GEOCODING_IDLE,
@@ -13,11 +14,13 @@
   import {
     IMAGERY_IDLE,
     IMAGERY_LOADING,
+    IMAGERY_LOADING_MESSAGE,
     imageryPlanFor,
     imageryPlanForExtent,
     loadImagery,
     provisionalFetchArea,
     USGS_NAIP_SERVICE_URL,
+    type ImageryEffects,
     type ImageryPlan,
     type ImageryState,
   } from '../core/imagery'
@@ -67,12 +70,27 @@
   let searching = $state(false)
   let imagery: ImageryState = $state(IMAGERY_IDLE)
   let plan: ImageryPlan | undefined = $state(undefined)
-  let picture = $state('')
+  let picture = $state<ShownPicture | undefined>(undefined)
   let copied = $state(false)
   let problem = $state('')
 
   /** The photograph's source, in the service's own words, read once it is on screen. */
   let credit = $state('')
+
+  /**
+   * The fetch for a brand-new candidate, with the shared cache left alone.
+   *
+   * Its picture is planned for the provisional Fetch Area, whose url nothing
+   * will ever ask for again: what a visitor fetches is the drawn frame plus its
+   * margin, a different url. Writing it would put megabytes in IndexedDB that no
+   * visit ever reads, so the write is refused - through the same fetch, so
+   * nothing else about the load changes. The browser's own HTTP cache may keep
+   * the bytes anyway, which is the browser's business rather than the app's.
+   */
+  const withoutCaching: ImageryEffects = {
+    ...imageryEffects,
+    writeCache: () => Promise.resolve(),
+  }
 
   /** Which fetch is the current one, so an abandoned one cannot overwrite a new state. */
   let fetching = 0
@@ -94,11 +112,7 @@
     void correct(existing)
   })
 
-  onDestroy(() => {
-    if (picture !== '') {
-      URL.revokeObjectURL(picture)
-    }
-  })
+  onDestroy(dropPicture)
 
   // The picture is the imagery service's either way, so it is credited here the
   // way the visitor app credits it - in the service's own words, read from it.
@@ -107,21 +121,9 @@
       return
     }
 
-    let abandoned = false
-
-    void loadAttribution(USGS_NAIP_SERVICE_URL)
-      .then((text) => {
-        if (!abandoned) {
-          credit = text
-        }
-      })
-      .catch(() => {
-        // No credit line beats a wrong one, and the picture still shows.
-      })
-
-    return () => {
-      abandoned = true
-    }
+    return followAttribution(USGS_NAIP_SERVICE_URL, (text) => {
+      credit = text
+    })
   })
 
   async function search(query: string): Promise<void> {
@@ -206,7 +208,9 @@
     plan = wanted
     imagery = IMAGERY_LOADING
 
-    const next = await loadImagery(wanted.requestUrl, imageryEffects)
+    // A brand-new candidate's picture is fetched with the cache left alone, for
+    // the reason `withoutCaching` gives; every other fetch is the visitor's own.
+    const next = await loadImagery(wanted.requestUrl, isNew(what) ? withoutCaching : imageryEffects)
 
     // Something else was asked for while this was in flight, so this answer is
     // not the one on screen any more.
@@ -216,10 +220,15 @@
 
     if (next.status === 'ready') {
       dropPicture()
-      picture = URL.createObjectURL(next.image)
+      picture = showPicture(next.image)
     }
 
     imagery = next
+  }
+
+  /** Whether this draft is a Site that does not exist yet, so its picture is provisional. */
+  function isNew(what: SiteDraft): boolean {
+    return what.frame === undefined && what.id === undefined
   }
 
   /** Everything about the picture that arithmetic decides, from the numbers the core owns. */
@@ -228,7 +237,7 @@
 
     // Nothing to plan a frame-shaped fetch from: the candidate is brand new, so
     // the picture is for the provisional Fetch Area instead.
-    return site.frame === undefined && what.id === undefined
+    return isNew(what)
       ? imageryPlanForExtent(site.origin, provisionalFetchArea(), USGS_NAIP_SERVICE_URL)
       : imageryPlanFor(site, USGS_NAIP_SERVICE_URL)
   }
@@ -257,10 +266,8 @@
   }
 
   function dropPicture(): void {
-    if (picture !== '') {
-      URL.revokeObjectURL(picture)
-      picture = ''
-    }
+    picture?.release()
+    picture = undefined
   }
 
   async function copy(): Promise<void> {
@@ -305,10 +312,7 @@
     {#if imagery.status === 'loading'}
       <!-- The same loading state the visitor app shows, because it is the same
            wait for the same picture. -->
-      <p role="status">
-        Fetching the photograph. The first visit to a place takes a few seconds; after that it is
-        instant.
-      </p>
+      <p role="status">{IMAGERY_LOADING_MESSAGE}</p>
     {:else if imagery.status === 'failed'}
       <p role="alert">{imagery.message}</p>
       <div class="bar">
@@ -328,7 +332,7 @@
 
       <FrameSketch
         {plan}
-        imageUrl={picture}
+        imageUrl={picture?.url ?? ''}
         origin={draft.candidate.position}
         frame={draft.frame}
         onframe={setFrame}
