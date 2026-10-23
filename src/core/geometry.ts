@@ -185,6 +185,48 @@ export interface LatLngBounds {
 }
 
 /**
+ * The two directions a rectangle runs in: along its length, and across its
+ * width, each a unit vector in ground metres.
+ *
+ * The basis everything else is built from, kept in one place so that anything
+ * placed relative to a rectangle agrees with where the rectangle is drawn: a
+ * corner of it, a duplicate beside it, the direction an overlap is looked for
+ * along. A second copy of the sine and cosine would be a second opinion about
+ * which way a rectangle faces.
+ */
+function axesOf(rectangle: OrientedRectangle): readonly [Offset, Offset] {
+  const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
+
+  return [
+    { eastMetres: Math.sin(radians), northMetres: Math.cos(radians) },
+    { eastMetres: Math.cos(radians), northMetres: -Math.sin(radians) },
+  ]
+}
+
+/**
+ * A point measured from a rectangle's centre: so far along its length, and so
+ * far across its width.
+ */
+export function alongAndAcross(
+  rectangle: OrientedRectangle,
+  alongMetres: number,
+  acrossMetres: number,
+): Offset {
+  const [along, across] = axesOf(rectangle)
+
+  return {
+    eastMetres:
+      rectangle.centre.eastMetres +
+      along.eastMetres * alongMetres +
+      across.eastMetres * acrossMetres,
+    northMetres:
+      rectangle.centre.northMetres +
+      along.northMetres * alongMetres +
+      across.northMetres * acrossMetres,
+  }
+}
+
+/**
  * The four corners of an oriented rectangle, as ground metres from the Site's
  * origin, in order around the perimeter.
  *
@@ -192,33 +234,6 @@ export interface LatLngBounds {
  * straight to a polygon, and corners in any other order are drawn as a bowtie.
  * The area enclosed is what notices.
  */
-/**
- * A point measured from a rectangle's centre: so far along its length, and so
- * far across its width.
- *
- * The basis the corners are walked in, kept in one place so that anything placed
- * relative to a rectangle agrees with where the rectangle is drawn: a duplicate
- * beside it, a handle beyond its nose, a corner of it.
- */
-export function alongAndAcross(
-  rectangle: OrientedRectangle,
-  alongMetres: number,
-  acrossMetres: number,
-): Offset {
-  const radians = rectangle.rotationDegrees * DEGREES_TO_RADIANS
-
-  return {
-    eastMetres:
-      rectangle.centre.eastMetres +
-      alongMetres * Math.sin(radians) +
-      acrossMetres * Math.cos(radians),
-    northMetres:
-      rectangle.centre.northMetres +
-      alongMetres * Math.cos(radians) -
-      acrossMetres * Math.sin(radians),
-  }
-}
-
 export function cornersOf(rectangle: OrientedRectangle): Offset[] {
   const halfLength = rectangle.lengthMetres / 2
   const halfWidth = rectangle.widthMetres / 2
@@ -263,6 +278,75 @@ export function containsPoint(
     Math.abs(along) <= rectangle.lengthMetres / 2 + paddingMetres &&
     Math.abs(across) <= rectangle.widthMetres / 2 + paddingMetres
   )
+}
+
+/**
+ * How close two rectangles have to be before they count as touching rather than
+ * as meeting.
+ *
+ * A nanometre. A shared edge worked out twice - once as the far side of one
+ * rectangle and once as the near side of the next - differs by a rounding error
+ * of around 1e-14 m, so a rectangle laid exactly beside another comes back a
+ * hair overlapping and says so to anyone looking at it. The tolerance is far
+ * above that noise and far below anything the picture can show, where a screen
+ * pixel is some 30 cm of ground, so it changes no answer anyone can see.
+ */
+const TOUCHING_METRES = 1e-9
+
+/**
+ * Whether two oriented rectangles cover any of the same ground.
+ *
+ * The separating-axis test: two convex shapes are clear of each other exactly
+ * when one of their own directions has them on opposite sides of a gap, so that
+ * is the only thing looked for. The directions and the corners both come from
+ * the rectangle basis the picture is drawn from, which is what makes a pair
+ * that is seen to cover and a pair that is reported as covering the same pair.
+ *
+ * Touching is not overlapping. Two vehicles nose to tail or parked abreast
+ * share an edge and no ground, which is an arrangement that fits.
+ */
+export function overlaps(left: OrientedRectangle, right: OrientedRectangle): boolean {
+  const leftCorners = cornersOf(left)
+  const rightCorners = cornersOf(right)
+
+  for (const rectangle of [left, right]) {
+    for (const axis of axesOf(rectangle)) {
+      if (apartAlong(leftCorners, rightCorners, axis)) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+/**
+ * Whether two sets of corners lie on opposite sides of a gap, measured along one
+ * direction.
+ *
+ * Touching counts as apart: there may be no gap at all, and sharing an edge is
+ * not covering ground.
+ */
+function apartAlong(one: readonly Offset[], other: readonly Offset[], axis: Offset): boolean {
+  const [oneLeast, oneMost] = spanAlong(one, axis)
+  const [otherLeast, otherMost] = spanAlong(other, axis)
+
+  return oneMost <= otherLeast + TOUCHING_METRES || otherMost <= oneLeast + TOUCHING_METRES
+}
+
+/** How far along a direction a set of points reaches, from its least to its most. */
+function spanAlong(corners: readonly Offset[], axis: Offset): readonly [number, number] {
+  let least = Infinity
+  let most = -Infinity
+
+  for (const corner of corners) {
+    const along = corner.eastMetres * axis.eastMetres + corner.northMetres * axis.northMetres
+
+    least = Math.min(least, along)
+    most = Math.max(most, along)
+  }
+
+  return [least, most]
 }
 
 /**

@@ -16,7 +16,7 @@
   } from '../core/geometry'
   import type { ImageryPlan } from '../core/imagery'
   import { LABEL_FONT_PIXELS, labelFor, labelRotationFor } from '../core/label'
-  import { rectangleOf, type Placement } from '../core/layout'
+  import { overlappingIds, rectangleOf, type Placement } from '../core/layout'
   import { cssColour } from '../core/colour'
   import { snapAngle, snapCandidates } from '../core/snapping'
   import { isDragStart, type Point } from './pointer'
@@ -32,6 +32,16 @@
   /** The diameter of the handle a vehicle is turned by, in screen pixels. */
   const HANDLE_PIXELS = 26
 
+  /**
+   * The outline a vehicle wears when it covers part of another.
+   *
+   * A red rather than a colour of its own: the fill is the vehicle's, and two
+   * things said in one channel say neither. Selection keeps the heavier outline
+   * it already had and its handle, so a selected collision is still readable as
+   * both.
+   */
+  const COLLISION_COLOUR = '#dc2626'
+
   interface Props {
     /** An object url for the picture, already fetched. */
     imageUrl: string
@@ -44,13 +54,29 @@
     placements: readonly Placement[]
     /** The Placement that is selected, if one is. */
     selectedId: string | undefined
+    /**
+     * How see-through every placed vehicle is drawn. A view of the session
+     * rather than a property of a vehicle, so it arrives here rather than being
+     * kept with a Layout.
+     */
+    opacity: number
     onselect: (id: string | undefined) => void
     onmove: (id: string, centre: Offset) => void
     onrotate: (id: string, rotationDegrees: number) => void
   }
 
-  let { imageUrl, plan, origin, frame, placements, selectedId, onselect, onmove, onrotate }: Props =
-    $props()
+  let {
+    imageUrl,
+    plan,
+    origin,
+    frame,
+    placements,
+    selectedId,
+    opacity,
+    onselect,
+    onmove,
+    onrotate,
+  }: Props = $props()
 
   let element: HTMLDivElement
 
@@ -353,18 +379,24 @@
     return second.distanceTo(third)
   }
 
-  function draw(corners: readonly LatLng[], placement: Placement, selected: boolean): void {
+  function draw(
+    corners: readonly LatLng[],
+    placement: Placement,
+    selected: boolean,
+    overlapping: boolean,
+  ): void {
     const into = shapes
     if (into === undefined) {
       return
     }
 
     L.polygon(corners.map(toTuple), {
-      className: selected ? 'placement selected' : 'placement',
-      color: selected ? '#ffffff' : '#1b1b1b',
-      weight: selected ? 3 : 1,
+      className: `placement${selected ? ' selected' : ''}${overlapping ? ' overlapping' : ''}`,
+      color: overlapping ? COLLISION_COLOUR : selected ? '#ffffff' : '#1b1b1b',
+      weight: selected ? 3 : overlapping ? 2 : 1,
       fillColor: cssColour(placement.vehicle.colour),
-      fillOpacity: selected ? 0.6 : 0.4,
+      // The fill's opacity is not set here: it is the view's, and reaches every
+      // placement through the variable the map sets below.
       interactive: false,
     }).addTo(into)
 
@@ -470,6 +502,12 @@
       ...(spun !== undefined && turning?.id === placement.id ? { rotationDegrees: spun } : {}),
     }))
 
+    // Asked of the same placements that are about to be drawn, the ones in
+    // flight included, so a vehicle carried over another is marked while it is
+    // over it rather than only once the finger is lifted. The rectangles are the
+    // ones drawn below, so the mark and the picture cannot disagree.
+    const colliding = overlappingIds(shown)
+
     const drawAll = (): void => {
       into.clearLayers()
       for (const placement of shown) {
@@ -477,6 +515,7 @@
           cornersOf(rectangleOf(placement)).map((corner) => latLngFromOffset(origin, corner)),
           placement,
           placement.id === chosen,
+          colliding.has(placement.id),
         )
       }
     }
@@ -506,7 +545,9 @@
   class="map"
   bind:this={element}
   onpointerdown={pressed}
-  style={`--label-font-pixels: ${String(LABEL_FONT_PIXELS)}px`}
+  style={`--label-font-pixels: ${String(LABEL_FONT_PIXELS)}px; --placement-opacity: ${String(
+    opacity,
+  )}`}
 ></div>
 
 <style>

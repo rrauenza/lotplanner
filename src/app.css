@@ -83,6 +83,32 @@ body {
   box-sizing: border-box;
 }
 
+/*
+ * A placed vehicle is drawn by Leaflet rather than by Svelte, so it cannot carry
+ * a scoped class and belongs here. How see-through it is arrives through the
+ * variable the map sets on itself, the same handover the label font uses: the
+ * opacity is a view of this session rather than a property of a vehicle, so
+ * there is nowhere in a Layout for it to have been written down.
+ *
+ * It is set here rather than on the polygon because Leaflet puts the fill's
+ * opacity in a presentation attribute, which CSS outranks - the alternative is
+ * redrawing every vehicle whenever the control moves.
+ */
+path.placement {
+  fill-opacity: var(--placement-opacity);
+}
+
+/*
+ * The square that stands for a vehicle's colour. Two panels draw one - the
+ * palette, and the count of what is already on the ground - so it is shared
+ * rather than written twice.
+ */
+.swatch {
+  border-radius: 0.125rem;
+  height: 1rem;
+  width: 1rem;
+}
+
 .placement-label {
   color: #111;
   font-size: var(--label-font-pixels, 12px);

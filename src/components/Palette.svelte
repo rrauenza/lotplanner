@@ -133,12 +133,6 @@
     touch-action: none;
   }
 
-  .swatch {
-    border-radius: 0.125rem;
-    height: 1rem;
-    width: 1rem;
-  }
-
   .size {
     font-variant-numeric: tabular-nums;
     opacity: 0.75;

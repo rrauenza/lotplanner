@@ -10,6 +10,7 @@ import {
   mercatorBoundsForExtent,
   metresPerPixel,
   offsetFromLatLng,
+  overlaps,
   zoomAtNativeResolution,
   type Offset,
 } from './geometry'
@@ -251,6 +252,96 @@ describe('cornersOf', () => {
         '30.000000,10.000000',
         '30.000000,30.000000',
       ].sort(),
+    )
+  })
+
+  it('puts a rectangle at an angle on the four corners its own axes give it', () => {
+    // Twenty metres long and ten wide, turned 30 degrees clockwise from north.
+    // Each corner is the middle walked ten along and five across, so the nose's
+    // right-hand corner is east 10*sin30 + 5*cos30 and north 10*cos30 - 5*sin30:
+    // about 9.33 m east and 6.16 m north of the middle.
+    expect(
+      asKeys(
+        cornersOf({
+          centre: { eastMetres: 0, northMetres: 0 },
+          lengthMetres: 20,
+          widthMetres: 10,
+          rotationDegrees: 30,
+        }),
+      ),
+    ).toEqual(
+      [
+        '-0.669873,-11.160254',
+        '-9.330127,-6.160254',
+        '0.669873,11.160254',
+        '9.330127,6.160254',
+      ].sort(),
+    )
+  })
+})
+
+describe('overlaps', () => {
+  /** Twenty metres long and ten wide, square to north unless it is turned. */
+  const square = {
+    centre: { eastMetres: 0, northMetres: 0 },
+    lengthMetres: 20,
+    widthMetres: 10,
+    rotationDegrees: 0,
+  }
+
+  it('knows two rectangles covering each other from two that are apart', () => {
+    expect(overlaps(square, { ...square, centre: { eastMetres: 1, northMetres: 1 } })).toBe(true)
+    expect(overlaps(square, { ...square, centre: { eastMetres: 11, northMetres: 0 } })).toBe(false)
+  })
+
+  it('needs no corner of one inside the other, which is what crossing looks like', () => {
+    // A quarter turn apart and in the same place: two long rectangles crossing
+    // at the middle of both. No corner of either is enclosed by the other, so a
+    // check that looked for an enclosed corner would miss it.
+    expect(overlaps(square, { ...square, rotationDegrees: 90 })).toBe(true)
+  })
+
+  it('does not settle for the box around a rectangle', () => {
+    // Two 20 by 2 rectangles lying along the same diagonal, middles five metres
+    // apart. Each box reaches 10*sin45 + 1*cos45 - about 7.8 m - from its middle
+    // in every direction, so the two boxes overlap heavily while the rectangles
+    // themselves miss each other by 1.5 m of clear air.
+    const along = {
+      centre: { eastMetres: 0, northMetres: 0 },
+      lengthMetres: 20,
+      widthMetres: 2,
+      rotationDegrees: 45,
+    }
+    const beside = { ...along, centre: { eastMetres: 5, northMetres: 0 } }
+
+    expect(2 * (10 * Math.sin(Math.PI / 4) + Math.cos(Math.PI / 4))).toBeGreaterThan(5)
+    expect(overlaps(along, beside)).toBe(false)
+  })
+
+  it('leaves a pair that only touches alone, along an edge or at a corner', () => {
+    // Ten metres along the width, twenty along the length, and both at once: a
+    // pair parked abreast, nose to tail, or diagonally off each other's corner.
+    // Sharing a boundary is sharing no ground, and is an arrangement that fits.
+    expect(overlaps(square, { ...square, centre: { eastMetres: 10, northMetres: 0 } })).toBe(false)
+    expect(overlaps(square, { ...square, centre: { eastMetres: 0, northMetres: 20 } })).toBe(false)
+    expect(overlaps(square, { ...square, centre: { eastMetres: 10, northMetres: 20 } })).toBe(false)
+
+    // And turned, so the shared edge is one both of them computed at an angle:
+    // once nose to tail, and once laid a width apart the way a duplicate is -
+    // where the edge worked out twice comes back a hair into it and only the
+    // tolerance keeps it a touch rather than a collision.
+    const turned = { ...square, rotationDegrees: 90 }
+    expect(overlaps(turned, { ...turned, centre: { eastMetres: 20, northMetres: 0 } })).toBe(false)
+    expect(
+      overlaps(turned, { ...turned, centre: alongAndAcross(turned, 0, turned.widthMetres) }),
+    ).toBe(false)
+  })
+
+  it('reports an overlap of a millimetre, not only a gross one', () => {
+    // The tolerance that stops a shared edge reading as an overlap is a
+    // nanometre, so anything the picture could show still counts.
+    expect(overlaps(square, { ...square, centre: { eastMetres: 9.999, northMetres: 0 } })).toBe(
+      true,
     )
   })
 })

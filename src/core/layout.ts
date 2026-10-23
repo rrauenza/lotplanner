@@ -1,6 +1,7 @@
 import {
   alongAndAcross,
   boundsForExtent,
+  overlaps,
   type LatLng,
   type LatLngBounds,
   type Offset,
@@ -78,6 +79,65 @@ export function rectangleOf(placement: Placement): OrientedRectangle {
     widthMetres: inchesToMetres(placement.vehicle.widthInches),
     rotationDegrees: placement.rotationDegrees,
   }
+}
+
+/** One vehicle on the ground, and how many of it are placed. */
+export interface VehicleCount {
+  readonly vehicle: Vehicle
+  readonly count: number
+}
+
+/**
+ * How many of each vehicle are placed, in the order they were first put down.
+ *
+ * Counted from what the Placements carry rather than from the collection they
+ * were dragged out of. A Layout keeps its own copies (ADR 0002), so a corrected
+ * vehicle is a value the palette no longer holds - and a count that read the
+ * palette would drop to nothing while the corrected vehicle was still standing
+ * on the ground.
+ *
+ * The tally is a local array written to while it is built, and handed back as
+ * the read-only shape: the immutability this file keeps is about Layouts
+ * (ADR 0004), and no Layout is touched here.
+ */
+export function countsByVehicle(placements: readonly Placement[]): readonly VehicleCount[] {
+  const counts: { vehicle: Vehicle; count: number }[] = []
+
+  for (const placement of placements) {
+    const standing = counts.find((each) => sameVehicle(each.vehicle, placement.vehicle))
+
+    if (standing === undefined) {
+      counts.push({ vehicle: placement.vehicle, count: 1 })
+      continue
+    }
+
+    standing.count += 1
+  }
+
+  return counts
+}
+
+/**
+ * The Placements that cover any part of another, by id.
+ *
+ * Both of a pair come back: there is no answer to which of two rectangles is the
+ * one at fault, and what has to be marked on the picture is both of them. The
+ * rectangles are the ones that are drawn, so a pair is named here exactly when
+ * it covers on screen.
+ */
+export function overlappingIds(placements: readonly Placement[]): ReadonlySet<string> {
+  const overlapping = new Set<string>()
+
+  for (const [index, one] of placements.entries()) {
+    for (const other of placements.slice(index + 1)) {
+      if (overlaps(rectangleOf(one), rectangleOf(other))) {
+        overlapping.add(one.id)
+        overlapping.add(other.id)
+      }
+    }
+  }
+
+  return overlapping
 }
 
 /**

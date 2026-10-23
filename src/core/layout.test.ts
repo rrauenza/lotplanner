@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { containsPoint, offsetFromLatLng } from './geometry'
 import {
+  countsByVehicle,
   duplicateOf,
   newLayout,
+  overlappingIds,
   rectangleOf,
   withEditedVehicle,
   withMovedPlacement,
@@ -34,6 +36,15 @@ const SUV = vehicle({
   widthInches: 79,
   lengthInches: 199,
   colour: '#3b82f6',
+})
+
+/** A second vehicle from the System Collection, so counting has two to tell apart. */
+const COACH = vehicle({
+  name: 'Coach (45 ft, MCI J4500)',
+  shortLabel: 'Coach',
+  widthInches: 102,
+  lengthInches: 547,
+  colour: '#22c55e',
 })
 
 function at(id: string, centre = { eastMetres: 0, northMetres: 0 }): Placement {
@@ -169,14 +180,6 @@ describe('copying and removing a Placement', () => {
 })
 
 describe('editing a vehicle that is in a Layout', () => {
-  const COACH = vehicle({
-    name: 'Coach (45 ft, MCI J4500)',
-    shortLabel: 'Coach',
-    widthInches: 102,
-    lengthInches: 547,
-    colour: '#22c55e',
-  })
-
   const withThree = withPlacement(
     withPlacement(withPlacement(newLayout(SITE), at('one')), at('two')),
     { id: 'three', vehicle: COACH, centre: { eastMetres: 0, northMetres: 0 }, rotationDegrees: 90 },
@@ -211,5 +214,89 @@ describe('editing a vehicle that is in a Layout', () => {
     const edited = withEditedVehicle(withThree, vehicle({ ...SUV, name: 'Never placed' }), SUV)
 
     expect(edited.placements).toEqual(withThree.placements)
+  })
+})
+
+/** The Coach, laid down at the same angle the `at` helper uses. */
+function coachAt(id: string, centre = { eastMetres: 0, northMetres: 0 }): Placement {
+  return { id, vehicle: COACH, centre, rotationDegrees: 90 }
+}
+
+describe('what is on the ground', () => {
+  it('counts each vehicle placed, in the order they were first put down', () => {
+    const layout = withPlacement(
+      withPlacement(withPlacement(newLayout(SITE), at('one')), coachAt('two')),
+      at('three'),
+    )
+
+    expect(countsByVehicle(layout.placements)).toEqual([
+      { vehicle: SUV, count: 2 },
+      { vehicle: COACH, count: 1 },
+    ])
+  })
+
+  it('counts copies of one vehicle together, though reading a Layout back makes them separate objects', () => {
+    const alsoAnSuv: Placement = { ...at('two'), vehicle: { ...SUV } }
+
+    expect(countsByVehicle([at('one'), alsoAnSuv])).toEqual([{ vehicle: SUV, count: 2 }])
+  })
+
+  it('counts a corrected vehicle as its own, because the palette no longer holds it', () => {
+    // Correcting a placed vehicle changes the Layout's copy and only the
+    // Layout's (ADR 0002). Counting what the palette holds would report nothing
+    // on the ground while this one was standing there.
+    const corrected = vehicle({ ...SUV, widthInches: 84 })
+    const layout = withEditedVehicle(withPlacement(newLayout(SITE), at('one')), SUV, corrected)
+
+    expect(countsByVehicle(layout.placements)).toEqual([{ vehicle: corrected, count: 1 }])
+  })
+
+  it('has nothing to count on empty ground', () => {
+    expect(countsByVehicle(newLayout(SITE).placements)).toEqual([])
+  })
+})
+
+describe('what overlaps what', () => {
+  it('names both of a pair that cover each other', () => {
+    const twoOnTop = withPlacement(withPlacement(newLayout(SITE), at('one')), at('two'))
+
+    expect([...overlappingIds(twoOnTop.placements)].sort()).toEqual(['one', 'two'])
+  })
+
+  it('names a vehicle covering two others, and both of the two', () => {
+    const onTheGround = [
+      at('one'),
+      at('two', { eastMetres: 3, northMetres: 0 }),
+      at('on top', { eastMetres: 1.5, northMetres: 0 }),
+      at('far off', { eastMetres: 0, northMetres: 100 }),
+    ]
+
+    expect([...overlappingIds(onTheGround)].sort()).toEqual(['on top', 'one', 'two'])
+  })
+
+  it('names nothing for a copy parked abreast of what it came from', () => {
+    // The Duplicate button puts a copy one vehicle's width to the side. The two
+    // share an edge and no ground, and this is the closest call the app itself
+    // makes - a shared edge worked out twice, which is a touch and not a cover.
+    const original = at('one')
+    const layout = withPlacement(
+      withPlacement(newLayout(SITE), original),
+      duplicateOf(original, 'copy'),
+    )
+
+    expect(duplicateOf(original, 'copy').centre).not.toEqual(original.centre)
+    expect(overlappingIds(layout.placements).size).toBe(0)
+  })
+
+  it('leaves a whole row alone, nose to tail and abreast', () => {
+    const length = rectangleOf(at('one')).lengthMetres
+    const width = rectangleOf(at('one')).widthMetres
+    const row = [
+      at('one'),
+      at('abreast', { eastMetres: 0, northMetres: width }),
+      at('behind', { eastMetres: length, northMetres: 0 }),
+    ]
+
+    expect(overlappingIds(row).size).toBe(0)
   })
 })

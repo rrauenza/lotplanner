@@ -192,7 +192,7 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   await dragFromPalette(page, /Semi \+ 53 ft/, drop)
 
   const drawn = page.locator('path.placement')
-  const guide = page.locator('path.frame-guide')
+  const picture = page.locator('img.leaflet-image-layer')
   await expect(drawn).toHaveCount(1)
 
   const before = (await drawn.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 }
@@ -217,8 +217,15 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   // A drag beginning anywhere else pans the picture, and takes every vehicle
   // with it: the two move by the same amount, because the vehicle has not moved
   // over the ground at all.
+  //
+  // Measured against the photograph rather than against the Site Frame's own
+  // outline. That outline is dashed, and the box around a dashed stroke comes
+  // back a few pixels different from one moment to the next, which is more than
+  // this comparison is asking about; the picture has no such wobble.
   const vehicleBefore = middleOf(moved)
-  const frameBefore = middleOf((await guide.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })
+  const pictureBefore = middleOf(
+    (await picture.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 },
+  )
 
   await touchDrag(
     page,
@@ -228,17 +235,19 @@ test('moves the vehicle it is dragged from, and pans from anywhere else', async 
   )
 
   const vehicleAfter = middleOf((await drawn.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })
-  const frameAfter = middleOf((await guide.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 })
+  const pictureAfter = middleOf(
+    (await picture.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 },
+  )
 
   // The picture really did move, so the assertion below is not about two things
   // staying still together.
-  expect(Math.abs(frameAfter.x - frameBefore.x)).toBeGreaterThan(20)
-  expect(Math.abs(vehicleAfter.x - vehicleBefore.x - (frameAfter.x - frameBefore.x))).toBeLessThan(
-    1,
-  )
-  expect(Math.abs(vehicleAfter.y - vehicleBefore.y - (frameAfter.y - frameBefore.y))).toBeLessThan(
-    1,
-  )
+  expect(Math.abs(pictureAfter.x - pictureBefore.x)).toBeGreaterThan(20)
+  expect(
+    Math.abs(vehicleAfter.x - vehicleBefore.x - (pictureAfter.x - pictureBefore.x)),
+  ).toBeLessThan(1)
+  expect(
+    Math.abs(vehicleAfter.y - vehicleBefore.y - (pictureAfter.y - pictureBefore.y)),
+  ).toBeLessThan(1)
 })
 
 test('corrects a vehicle, and every copy of it at once', async ({ page }) => {

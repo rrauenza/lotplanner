@@ -19,6 +19,10 @@ adapter that talks to a browser is exercised only end to end.
 same piece of ground whether it is called "Option A" or nothing at all, so the name lives beside it
 rather than inside it, and a shared link carries the arrangement without a name (issue #13).
 
+**The view of a Layout is not the Layout.** The map's viewport and the opacity the placed vehicles
+are drawn at are ways of looking at the ground rather than arrangements on it, so neither is written
+down here, and opening a Layout again begins at the same view a first visit would.
+
 Failure is never fatal. If storage will not be read, or will not be written, the app keeps the work
 in memory, says plainly that nothing will be saved, and carries on: a working tool with no memory
 rather than a broken one. What storage gives back is not trusted either — a record can be from an

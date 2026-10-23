@@ -16,6 +16,10 @@ for turning it, which settles onto the angles of the space and of the vehicles a
 buttons to duplicate it or delete it. Undo and redo work over every one of those edits, by button or
 by keyboard.
 
+Under the photograph, a live count says how many of each vehicle are on the ground and warns when two
+of them overlap; the overlapping pair are outlined on the picture as well. Opacity is one control for
+all of them, so an overlap can be read through.
+
 Work is saved as it is edited, with no save button anywhere, and a place keeps as many named Layouts
 as you make for it: compare two options, come back to either, rename them, throw one away. A reload
 returns you to the one you were last working on. If the browser will not keep anything — private

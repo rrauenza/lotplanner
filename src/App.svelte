@@ -6,6 +6,7 @@
   import Layouts from './components/Layouts.svelte'
   import MapView from './components/MapView.svelte'
   import Palette from './components/Palette.svelte'
+  import Placed from './components/Placed.svelte'
   import VehicleEditor from './components/VehicleEditor.svelte'
   import type { Point } from './components/pointer'
   import { canRedo, canUndo, edit, redo, startEditing, undo, type Editor } from './core/editor'
@@ -79,6 +80,16 @@
 
   /** Whether the Layouts sheet is up. */
   let layoutsUp = $state(false)
+
+  /**
+   * How see-through every placed vehicle is drawn.
+   *
+   * A view of this session rather than part of the work, like the map's own
+   * viewport (ADR 0008): nothing records it, a reload starts here, and it is
+   * never written into a Layout. It starts low enough to read an overlap
+   * through, and high enough to tell one vehicle's colour from another's.
+   */
+  let opacity = $state(0.4)
 
   /**
    * How long edits settle before the Site's work is written. Long enough that
@@ -444,6 +455,16 @@
     selectedId = id
   }
 
+  /**
+   * Change how see-through the placed vehicles are.
+   *
+   * Deliberately not `change`: nothing about the Layout moves, so there is
+   * nothing for undo to reverse and nothing to write.
+   */
+  function setOpacity(next: number): void {
+    opacity = next
+  }
+
   function movePlacement(id: string, centre: Offset): void {
     if (layout !== undefined) {
       change(withMovedPlacement(layout, id, centre))
@@ -579,6 +600,7 @@
         frame={layout.frame}
         placements={layout.placements}
         {selectedId}
+        {opacity}
         onselect={selectPlacement}
         onmove={movePlacement}
         onrotate={rotatePlacement}
@@ -643,6 +665,7 @@
         Redo
       </button>
     </div>
+    <Placed placements={layout.placements} {opacity} onopacity={setOpacity} />
     <Palette ondrop={dropFrom} onplace={placeInTheMiddle} />
     <!-- Here even before it is known, so that the credit arriving cannot resize
          the map either. -->
