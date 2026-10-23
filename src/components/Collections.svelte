@@ -137,12 +137,18 @@
     form = { inCollection: id, of: which, adding: false }
   }
 
-  function corrected(next: Vehicle): void {
+  function corrected(requested: Vehicle): void {
     const open = form
 
     if (open === undefined) {
       return
     }
+
+    // A new vehicle starts from a placeholder with a label of its own, so
+    // without this a fleet of new vehicles would all be labelled "New vehicle".
+    // The name follows through the same rule the core applies to a vehicle made
+    // with no label at all, and only until the visitor gives one themselves.
+    const next = open.adding ? labelled(requested) : requested
 
     if (open.adding) {
       onaddvehicle(open.inCollection, next)
@@ -151,6 +157,12 @@
     }
 
     form = { inCollection: open.inCollection, of: next, adding: false }
+  }
+
+  function labelled(corrected: Vehicle): Vehicle {
+    return corrected.shortLabel === A_NEW_VEHICLE.shortLabel
+      ? vehicle({ ...corrected, shortLabel: '' })
+      : corrected
   }
 
   function show(id: string): void {
