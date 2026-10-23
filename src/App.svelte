@@ -1053,13 +1053,18 @@
 
 <main>
   <header>
-    <h1>{APP_TITLE}</h1>
-    <p>{APP_TAGLINE}</p>
+    <div class="titles">
+      <h1>{APP_TITLE}</h1>
+      <p>{APP_TAGLINE}</p>
+    </div>
     <div class="bar">
       <!-- Import is here rather than beside Share because a file may bring its
            own Site, so it has to be reachable before any place is open. The
            input is the only way a page may ask for a file, and cannot be opened
-           except by a click the visitor made, so the button clicks it. -->
+           except by a click the visitor made, so the button clicks it. It shares
+           the title's row rather than taking one of its own: below the title it
+           cost the map enough height that the selection sheet covered the middle
+           of a 720 px screen, where a vehicle just placed is picked up again. -->
       <button type="button" onclick={() => importInput?.click()}>Import a file</button>
       <input
         class="importing"
@@ -1266,6 +1271,29 @@
     /* Nothing spills past the viewport: what does not fit is decided between
        the stage and the chrome below, not by letting one overflow the other. */
     overflow: hidden;
+  }
+
+  /* The title block and the Import control share one row, so the control costs
+     the map no height of its own: on a 720 px screen the row it would otherwise
+     take is enough to bring the selection sheet up over the middle of the map,
+     where a vehicle was just placed. */
+  header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .titles {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+  }
+
+  /* The row is spaced by the header's own gap, not by the bar's page-level
+     margin, which would push the button off the title's centre line. */
+  header .bar {
+    margin-bottom: 0;
   }
 
   header h1 {
