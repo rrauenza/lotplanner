@@ -70,8 +70,8 @@
     nextCollectionName,
     received,
     withCreated,
-    withEditedVehicle as withEditedVehicleInCollection,
-    withRenamed as withRenamedCollection,
+    withEditedCollectionVehicle,
+    withRenamedCollection,
     withVehicle,
     withoutCollection,
     withoutVehicle,
@@ -456,7 +456,7 @@
   }
 
   function editVehicleInCollection(id: string, before: Vehicle, after: Vehicle): void {
-    keepCollections(withEditedVehicleInCollection(collections ?? [], id, before, after))
+    keepCollections(withEditedCollectionVehicle(collections ?? [], id, before, after))
   }
 
   function removeVehicleFromCollection(id: string, removed: Vehicle): void {
@@ -861,11 +861,14 @@
   /**
    * What will not be kept, if anything will not.
    *
-   * One notice rather than one per kind of work: a screen reader handed two at
-   * once reads them as two problems, and the visitor has the same one either
-   * way - nothing here will be here tomorrow.
+   * Named for what it says rather than `notice`, which is what the banner a
+   * declined or imported link raises is called: the two are different things and
+   * a reader should not have to work out which is meant. One message rather than
+   * one per kind of work, because a screen reader handed two at once reads them
+   * as two problems, and the visitor has the same one either way - nothing here
+   * will be here tomorrow.
    */
-  const notice = $derived(
+  const unsaved = $derived(
     saving.kept ? (collectionsSaving.kept ? undefined : collectionsSaving.message) : saving.message,
   )
 
@@ -1213,11 +1216,11 @@
         onmove={movePlacement}
         onrotate={rotatePlacement}
       />
-      {#if notice !== undefined}
+      {#if unsaved !== undefined}
         <!-- Over the photograph rather than in the column, for the reason the
-             sheets are: a notice arriving must not resize the map and move the
+             sheets are: a message arriving must not resize the map and move the
              ground under whoever is working on it. -->
-        <p class="notsaved" role="status">{notice}</p>
+        <p class="notsaved" role="status">{unsaved}</p>
       {/if}
       {#if sharedLink !== ''}
         <!-- Over the photograph too, and for the same reason: the link

@@ -13,6 +13,7 @@
  */
 
 import { parseColour } from './colour'
+import { isNumber } from './numbers'
 import { tidy } from './text'
 
 const MAXIMUM_NAME_LENGTH = 64
@@ -146,9 +147,4 @@ function wholeInches(value: number, what: string): number {
     throw new Error(`A vehicle ${what} has to be a whole number of inches.`)
   }
   return value
-}
-
-/** Finite, because a NaN that reached the map would draw nothing anywhere. */
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
 }

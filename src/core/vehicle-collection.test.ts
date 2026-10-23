@@ -21,8 +21,8 @@ import {
   received,
   samenessHint,
   withCreated,
-  withEditedVehicle,
-  withRenamed,
+  withEditedCollectionVehicle,
+  withRenamedCollection,
   withVehicle,
   withoutCollection,
   withoutVehicle,
@@ -167,11 +167,15 @@ describe("the System Collection among the visitor's own", () => {
   it('cannot be renamed, deleted or edited by anything that names it by id', () => {
     const collections = [mine('m', 'Mine', [SUV])]
 
-    expect(withRenamed(collections, SYSTEM_COLLECTION_ID, 'Hijacked')).toEqual(collections)
+    expect(withRenamedCollection(collections, SYSTEM_COLLECTION_ID, 'Hijacked')).toEqual(
+      collections,
+    )
     expect(withoutCollection(collections, SYSTEM_COLLECTION_ID)).toEqual(collections)
     expect(withVehicle(collections, SYSTEM_COLLECTION_ID, COACH)).toEqual(collections)
     expect(withoutVehicle(collections, SYSTEM_COLLECTION_ID, SUV)).toEqual(collections)
-    expect(withEditedVehicle(collections, SYSTEM_COLLECTION_ID, SUV, COACH)).toEqual(collections)
+    expect(withEditedCollectionVehicle(collections, SYSTEM_COLLECTION_ID, SUV, COACH)).toEqual(
+      collections,
+    )
   })
 
   it("cannot be created as one of the visitor's own collections", () => {
@@ -308,7 +312,7 @@ describe('importing a collection, which is always a fork', () => {
 
   it('gives the fork vehicles of its own, so editing it cannot reach the arrival', () => {
     const forked = received([], ARRIVED, 'new-id')
-    const edited = withEditedVehicle([forked], 'new-id', SUV, COACH)
+    const edited = withEditedCollectionVehicle([forked], 'new-id', SUV, COACH)
     const back = edited[0]
 
     expect(back?.vehicles).toEqual([COACH, COACH])
@@ -468,12 +472,11 @@ describe("editing the visitor's own collections", () => {
   it('renames one where it sits, and refuses a name that is not one', () => {
     const collections = [mine('a', 'First'), mine('b', 'Second')]
 
-    expect(withRenamed(collections, 'b', '  The   far   fleet ').map((each) => each.name)).toEqual([
-      'First',
-      'The far fleet',
-    ])
-    expect(withRenamed(collections, 'b', ' \u0000\t ')).toEqual(collections)
-    expect(withRenamed(collections, 'b', SYSTEM_COLLECTION_NAME)).toEqual(collections)
+    expect(
+      withRenamedCollection(collections, 'b', '  The   far   fleet ').map((each) => each.name),
+    ).toEqual(['First', 'The far fleet'])
+    expect(withRenamedCollection(collections, 'b', ' \u0000\t ')).toEqual(collections)
+    expect(withRenamedCollection(collections, 'b', SYSTEM_COLLECTION_NAME)).toEqual(collections)
   })
 
   it('takes one away without touching the others', () => {
@@ -495,7 +498,7 @@ describe("editing the visitor's own collections", () => {
   it('corrects a vehicle in one collection and leaves the others alone', () => {
     const collections = [mine('a', 'First', [SUV]), mine('b', 'Second', [SUV])]
     const wider = { ...SUV, widthInches: 96 }
-    const corrected = withEditedVehicle(collections, 'b', SUV, wider)
+    const corrected = withEditedCollectionVehicle(collections, 'b', SUV, wider)
 
     expect(corrected[0]?.vehicles).toEqual([SUV])
     expect(corrected[1]?.vehicles).toEqual([wider])
@@ -523,7 +526,7 @@ describe('deleting a collection', () => {
     // Correcting the collection's copy does not reach the Layout's copy, and
     // neither does throwing the collection away (ADR 0002).
     const wider = { ...COACH, widthInches: 96 }
-    const edited = withEditedVehicle(collections, 'm', COACH, wider)
+    const edited = withEditedCollectionVehicle(collections, 'm', COACH, wider)
     const left = withoutCollection(edited, 'm')
 
     expect(left).toEqual([])

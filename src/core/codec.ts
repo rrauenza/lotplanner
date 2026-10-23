@@ -1,5 +1,6 @@
 import type { LatLng, LatLngBounds, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
+import { isNumber } from './numbers'
 import { sameVehicle, vehicle, type Vehicle } from './vehicle'
 import type { ArrivedCollection } from './vehicle-collection'
 
@@ -493,9 +494,4 @@ function asArray(value: unknown): readonly unknown[] | undefined {
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
-}
-
-/** Finite, because a NaN that reached the map would draw nothing anywhere. */
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
 }

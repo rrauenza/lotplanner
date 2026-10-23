@@ -341,7 +341,7 @@ export function withCreated(
  * be readable, and a name the System Collection already has cannot be taken even
  * by somebody asking twice.
  */
-export function withRenamed(
+export function withRenamedCollection(
   mine: readonly VehicleCollection[],
   id: string,
   name: string,
@@ -388,7 +388,7 @@ export function withVehicle(
  * Collection's Vehicles are plain values: two of them are two copies, and after
  * a trip through storage they are not even the same object.
  */
-export function withEditedVehicle(
+export function withEditedCollectionVehicle(
   mine: readonly VehicleCollection[],
   id: string,
   before: Vehicle,

@@ -1,5 +1,6 @@
 import type { LatLng, LatLngBounds, Offset, SiteFrame } from './geometry'
 import type { Layout, Placement } from './layout'
+import { isNumber } from './numbers'
 import { tidy } from './text'
 import { readVehicle } from './vehicle'
 
@@ -434,9 +435,4 @@ function readFrame(value: unknown): SiteFrame | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-/** Finite, because a NaN that reached the map would draw nothing anywhere. */
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
 }
