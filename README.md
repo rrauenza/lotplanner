@@ -23,6 +23,11 @@ vehicle in, remove one from, and throw away; they belong to the browser rather t
 they come with you from one site to the next. A collection that was received from somebody else says
 whose it was, and importing one always makes a new collection rather than touching an existing one.
 
+A Layout carries its own copies of the vehicles it uses, so it opens whatever collections you
+happen to have. When its vehicles are not in any of yours, opening it says exactly which are
+missing, and offers one action to take them into a new collection — or to leave them, as a Layout
+works either way.
+
 Under the photograph, a live count says how many of each vehicle are on the ground and warns when two
 of them overlap; the overlapping pair are outlined on the picture as well. Opacity is one control for
 all of them, so an overlap can be read through.
