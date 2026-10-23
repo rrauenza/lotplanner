@@ -233,7 +233,7 @@ describe('versioning, which cannot be retrofitted', () => {
     const current = JSON.parse(
       encodeArtifact({ kind: 'layout', layout: gridLayout() }),
     ) as unknown[]
-    const older = [current[0], 0, ...(current.slice(2, 7))]
+    const older = [current[0], 0, ...current.slice(2, 7)]
     older.push(current[8], current[7])
 
     const read = decodeArtifact(JSON.stringify(older), {
