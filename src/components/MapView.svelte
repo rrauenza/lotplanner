@@ -8,6 +8,7 @@
     containsPoint,
     cornersOf,
     latLngFromOffset,
+    orientation,
     type LatLng,
     type Offset,
     type SiteFrame,
@@ -525,6 +526,37 @@
     }).addTo(into)
   }
 
+  /**
+   * Whether two frames are the same frame.
+   *
+   * By value rather than by identity, and by orientation rather than by the
+   * number that arrived: a frame at 270 degrees draws the same rectangle as one
+   * at 90, and redrawing for a difference nobody can see would move the view for
+   * no reason.
+   */
+  function sameFrame(one: SiteFrame | undefined, other: SiteFrame | undefined): boolean {
+    if (one === undefined || other === undefined) {
+      return one === other
+    }
+
+    return (
+      one.centre.eastMetres === other.centre.eastMetres &&
+      one.centre.northMetres === other.centre.northMetres &&
+      one.lengthMetres === other.lengthMetres &&
+      one.widthMetres === other.widthMetres &&
+      orientation(one.rotationDegrees) === orientation(other.rotationDegrees)
+    )
+  }
+
+  /** The frame the guide was last drawn for, as values rather than as an object. */
+  let drawnFrame: SiteFrame | undefined = undefined
+
+  /** Whether the guide has been drawn at all, so that "no frame" is not "not yet". */
+  let guideDrawn = false
+
+  /** The dashed outline showing where the frame is, while there is one. */
+  let guide: L.Polygon | undefined = undefined
+
   $effect(() => {
     // Built once for this picture, and deliberately not rebuilt when an edit
     // changes the Layout.
@@ -534,31 +566,10 @@
     // re-fits the view on every drag, and the ground jumps back to the frame
     // under the finger. One component is mounted per picture (choosing a place
     // goes through the loading state, which takes the map down), so the plan,
-    // the picture and the origin do not change underneath it. The frame is read
-    // once, when the map is built: opening another Layout of the same place
-    // leaves the guide as it was.
+    // the picture and the origin do not change underneath it. The frame is not
+    // read here: the guide below follows it, and only it.
     const created = untrack(() => {
       const map = imageryMap(element, plan, imageUrl, origin, { doubleTapZoom: false })
-
-      if (frame === undefined) {
-        map.map.fitBounds(toBounds(plan.bounds))
-      } else {
-        // A guide and never a limit, which is why it is drawn as an outline
-        // rather than as a mask over everything outside it.
-        const guide = L.polygon(
-          cornersOf(frame).map((corner) => toTuple(latLngFromOffset(origin, corner))),
-          {
-            className: 'frame-guide',
-            color: '#ffd166',
-            weight: 2,
-            dashArray: '6 4',
-            fill: false,
-            interactive: false,
-          },
-        ).addTo(map.map)
-
-        map.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
-      }
 
       surface = map
 
@@ -569,6 +580,56 @@
       surface = undefined
       created.destroy()
     }
+  })
+
+  $effect(() => {
+    const current = surface
+    const room = frame
+
+    if (current === undefined) {
+      return
+    }
+
+    // The frame is read tracked, unlike the map above, because opening another
+    // Layout of the same place is the one thing that changes it. It is compared
+    // by value rather than trusted as a change: Svelte treats an object prop as
+    // possibly mutated, so this runs on every edit even when the frame is the
+    // same object, and the comparison is what makes an edit free. It also means
+    // opening a Layout whose frame is equal by value leaves the view where it
+    // is - nothing about the ground changed, so there is nothing to re-fit to.
+    if (guideDrawn && sameFrame(drawnFrame, room)) {
+      return
+    }
+
+    // Drawing rather than deciding, and none of it is a reason to run again:
+    // this effect follows the frame and the surface it is drawn on.
+    untrack(() => {
+      guide?.remove()
+      guide = undefined
+      guideDrawn = true
+      drawnFrame = room === undefined ? undefined : { ...room, centre: { ...room.centre } }
+
+      if (room === undefined) {
+        current.map.fitBounds(toBounds(plan.bounds))
+        return
+      }
+
+      // A guide and never a limit, which is why it is drawn as an outline
+      // rather than as a mask over everything outside it.
+      guide = L.polygon(
+        cornersOf(room).map((corner) => toTuple(latLngFromOffset(origin, corner))),
+        {
+          className: 'frame-guide',
+          color: '#ffd166',
+          weight: 2,
+          dashArray: '6 4',
+          fill: false,
+          interactive: false,
+        },
+      ).addTo(current.map)
+
+      current.map.fitBounds(guide.getBounds(), { padding: [16, 16] })
+    })
   })
 
   $effect(() => {

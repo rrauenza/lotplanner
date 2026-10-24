@@ -7,6 +7,7 @@ import {
   middleOfTheMap,
   openTheSite,
   serveImagery,
+  touchDrag,
 } from './harness.js'
 
 /**
@@ -59,6 +60,60 @@ async function savedRecord(page: Page): Promise<string | null> {
 
     return key === undefined ? null : localStorage.getItem(key)
   })
+}
+
+/** The fixture Site's frame, as the manifest has it. */
+const SITE_FRAME = {
+  centre: { eastMetres: -132, northMetres: 199 },
+  lengthMetres: 137,
+  widthMetres: 98,
+  rotationDegrees: 90,
+}
+
+/**
+ * A different frame for the same Site: tall and narrow rather than wide and
+ * flat, and around the origin rather than up the road. Different enough in both
+ * shape and place that a guide left over from the first Layout cannot be
+ * mistaken for this one.
+ */
+const OTHER_FRAME = {
+  centre: { eastMetres: 0, northMetres: 0 },
+  lengthMetres: 80,
+  widthMetres: 30,
+  rotationDegrees: 0,
+}
+
+/** One saved Layout for the fixture Site, carrying the frame it was worked in. */
+function savedLayout(id: string, name: string, frame: object): object {
+  return {
+    id,
+    name,
+    layout: {
+      siteId: 'cupertino-sample',
+      siteName: 'Cupertino sample',
+      origin: { latitude: 37.32, longitude: -122.03 },
+      bounds: {
+        southWest: { latitude: 37.317, longitude: -122.035 },
+        northEast: { latitude: 37.323, longitude: -122.025 },
+      },
+      frame,
+      placements: [],
+    },
+  }
+}
+
+/**
+ * Put a Site's saved Layouts in storage before the app starts, as an older app
+ * or another browser would have left them.
+ *
+ * Seeded rather than built through the UI because the app has no way to give a
+ * Layout a frame of its own: a Layout carries the frame it was worked in, and
+ * the fixture Site has only one.
+ */
+async function seedLayouts(page: Page, layouts: readonly object[]): Promise<void> {
+  await page.addInitScript((saved: string) => {
+    localStorage.setItem('lotplanner:saved:cupertino-sample', saved)
+  }, JSON.stringify(layouts))
 }
 
 test('saves as it is edited, so a layout is not lost to a phone call', async ({ page }) => {
@@ -316,6 +371,65 @@ test('opens a Layout fitted on the Site Frame, and restores no viewport', async 
   expect(Math.abs((again?.width ?? 0) - (asOpened?.width ?? 0))).toBeLessThan(1)
   expect(Math.abs((again?.x ?? 0) - (asOpened?.x ?? 0))).toBeLessThan(1)
   expect(await drawnSizes(page)).toHaveLength(1)
+})
+
+test('follows the frame of the Layout that is opened, guide and fit', async ({ page }) => {
+  await seedLayouts(page, [
+    savedLayout('first', 'Layout 1', SITE_FRAME),
+    savedLayout('second', 'Layout 2', OTHER_FRAME),
+  ])
+
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const guide = page.locator('path.frame-guide')
+  const map = page.locator('.leaflet-container')
+
+  // The first Layout opens fitted to the Site's own frame.
+  const first = await guide.boundingBox()
+  expect(first).not.toBeNull()
+
+  // Zoomed away and panned on purpose, so that a view still fitted to the first
+  // frame cannot pass for one fitted to the second.
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  // A zoom animates, and a box measured mid-animation is not where it ends up.
+  await page.waitForTimeout(400)
+
+  const before = await map.boundingBox()
+  const across = { y: (before?.y ?? 0) + (before?.height ?? 0) / 2 }
+  await touchDrag(
+    page,
+    { x: (before?.x ?? 0) + 200, ...across },
+    { x: (before?.x ?? 0) + 500, ...across },
+  )
+  // A pan flicked with the finger keeps gliding for a moment.
+  await page.waitForTimeout(500)
+
+  await openLayouts(page)
+  await layouts(page).getByRole('button', { name: 'Layout 2', exact: true }).click()
+  // The fit that follows an opening animates for the same reason.
+  await page.waitForTimeout(400)
+
+  const mapBox = await map.boundingBox()
+  const second = await guide.boundingBox()
+  expect(mapBox).not.toBeNull()
+  expect(second).not.toBeNull()
+
+  const middle = middleOf(second ?? { x: 0, y: 0, width: 0, height: 0 })
+  const middleOfMap = middleOf(mapBox ?? { x: 0, y: 0, width: 0, height: 0 })
+
+  // The guide is the second Layout's frame: 30 m by 80 m, square to the
+  // compass, around the origin. Its middle is the middle of the picture...
+  expect(Math.abs(middle.x - middleOfMap.x)).toBeLessThan(3)
+  expect(Math.abs(middle.y - middleOfMap.y)).toBeLessThan(3)
+
+  // ...its shape is that frame's shape...
+  expect(Math.abs((second?.width ?? 0) / (second?.height ?? 1) - 30 / 80)).toBeLessThan(0.03)
+
+  // ...and the view is fitted to it, with the 16 px padding the app opens with.
+  expect(Math.abs((mapBox?.height ?? 0) - (second?.height ?? 0) - 32)).toBeLessThan(4)
 })
 
 test('carries on in memory, saying so, when the browser will not keep anything', async ({
