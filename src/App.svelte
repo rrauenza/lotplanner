@@ -56,6 +56,7 @@
   import { missingFrom } from './core/vehicle-collection'
   import { SITES } from './manifest'
   import { collections } from './state/collections.svelte'
+  import { WRITE_AFTER_MILLISECONDS } from './state/saving'
   import { sharing } from './state/sharing.svelte'
 
   /** The one thing the App asks of the map: where a screen point is on the ground. */
@@ -65,8 +66,8 @@
 
   /**
    * What the page load was, when it was more than a visit: a shared Layout to
-   * open, or a link this screen could not. The visitor's own page is the default,
-   * so a plain visit needs no prop at all.
+   * open, a shared Collection to offer, or a link this screen could not. The
+   * visitor's own page is the default, so a plain visit needs no prop at all.
    */
   let { arrival = { kind: 'visitor' } }: { arrival?: Arrival } = $props()
 
@@ -164,13 +165,6 @@
    * Layout (ADR 0008). It is not an edit either, so undo does not reach it.
    */
   let locked = $state(false)
-
-  /**
-   * How long edits settle before the Site's work is written. Long enough that
-   * typing a name into the form is one write rather than one per keystroke,
-   * short enough that a phone call arriving costs nothing worth noticing.
-   */
-  const WRITE_AFTER_MILLISECONDS = 400
 
   /**
    * The Site whose work is waiting to be written, and the work itself.
@@ -283,9 +277,9 @@
    * Write what is waiting, now.
    *
    * Called when the edits stop arriving, and again when the page is about to be
-   * hidden or thrown away: the phone call this is all for can arrive in the four
-   * hundred milliseconds after an edit, and a last moment does exist to write in
-   * - local storage writes synchronously, so this finishes before the page goes.
+   * hidden or thrown away: the phone call this is all for can arrive in the
+   * moment after an edit, and a last moment does exist to write in - local
+   * storage writes synchronously, so this finishes before the page goes.
    */
   async function write(): Promise<void> {
     const pending = waiting
@@ -421,10 +415,10 @@
   /**
    * Import a Layout from a file: show it, and keep it as a named Layout here.
    *
-   * Unlike a link, a file is kept - the visitor asked for it - so this is
-   * `showLayout` plus one named entry. It is added and never replaces: the id is
-   * this session's own, and `withImported` only appends, so work already on the
-   * Site survives an import byte for byte.
+   * Unlike a link, a file is kept - the visitor asked for it - so this shows the
+   * Layout the way `showLayout` does and keeps one named entry as well. It is
+   * added and never replaces: the id is this session's own, and `withImported`
+   * only appends, so work already on the Site survives an import byte for byte.
    */
   async function importLayout(layout: Layout, wanted: string | undefined): Promise<void> {
     const arrived = siteFromLayout(layout)
@@ -601,12 +595,12 @@
   /**
    * What will not be kept, if anything will not.
    *
-   * Named for what it says rather than `notice`, which is what the banner a
-   * declined or imported link raises is called: the two are different things and
-   * a reader should not have to work out which is meant. One message rather than
-   * one per kind of work, because a screen reader handed two at once reads them
-   * as two problems, and the visitor has the same one either way - nothing here
-   * will be here tomorrow.
+   * Named for what it says rather than `notice` or `declined`, which are what
+   * the import banner and the unopenable-link banner are called: they are
+   * different things and a reader should not have to work out which is meant.
+   * One message rather than one per kind of work, because a screen reader handed
+   * two at once reads them as two problems, and the visitor has the same one
+   * either way - nothing here will be here tomorrow.
    */
   const unsaved = $derived(
     saving.kept

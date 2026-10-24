@@ -18,6 +18,7 @@ import {
   type ArrivedCollection,
   type VehicleCollection,
 } from '../core/vehicle-collection'
+import { WRITE_AFTER_MILLISECONDS } from './saving'
 
 /**
  * The visitor's Vehicle Collections, as the session holds them.
@@ -40,16 +41,6 @@ import {
  * in the component that owns the Site: a Collection belongs to the browser, so
  * it comes with the visitor from one place to the next.
  */
-
-/**
- * How long edits settle before the collections are written.
- *
- * The same shape as a Layout's save, for the same reason - the phone call this
- * is all for can arrive in the moment after an edit - and deliberately its own
- * number rather than shared, because the two are independent policies that are
- * allowed to disagree.
- */
-const WRITE_AFTER_MILLISECONDS = 400
 
 /**
  * The visitor's own Vehicle Collections, and what the session is doing with
@@ -123,8 +114,7 @@ class Collections {
    * The Collections as they now stand, written shortly after.
    *
    * Kept in memory in the meantime, like a Layout's save: the same
-   * write-when-the-edits-stop shape, for the same reason - the phone call this
-   * is all for can arrive in the moment after an edit.
+   * write-when-the-edits-stop shape, and the same delay before it writes.
    */
   private keep(next: readonly VehicleCollection[]): void {
     this.mine = next
