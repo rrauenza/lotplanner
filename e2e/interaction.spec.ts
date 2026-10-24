@@ -9,6 +9,7 @@ import {
   touchDrag,
   touchHoldDrag,
   touchTwoFinger,
+  turnTo,
 } from './harness.js'
 
 /**
@@ -264,6 +265,71 @@ test('freezes every vehicle with the lock, so every gesture pans the picture', a
   expect(Math.abs(middleOf(moved).x - again.x)).toBeGreaterThan(50)
   expect(Math.abs(after.x - still.x)).toBeLessThan(2)
   await expect(page.locator('path.placement.selected')).toHaveCount(1)
+})
+
+test('moves and turns a vehicle without rebuilding the map or moving the view', async ({
+  page,
+}) => {
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const map = await mapBox(page)
+  await dragFromPalette(page, /Semi \+ 53 ft/, { x: middleOf(map).x, y: map.y + 70 })
+  await expect(page.locator('path.placement')).toHaveCount(1)
+
+  // Marked, so that a rebuild of the map - which would put a new picture there -
+  // is visible as the mark going missing, even if the new view happened to land
+  // in the same place.
+  await page.evaluate(() => {
+    document.querySelector('img.leaflet-image-layer')?.setAttribute('data-survived', 'yes')
+  })
+
+  // Panned away from the frame the place opened fitted to, which is the state
+  // #9 was about: a re-fit on the next edit would put the ground back under the
+  // finger rather than leave it where it was put.
+  await touchDrag(page, { x: map.x + 100, y: map.y + 40 }, { x: map.x + 300, y: map.y + 40 }, 10)
+  // A pan flicked with the finger keeps gliding for a moment.
+  await page.waitForTimeout(500)
+
+  const pictureBefore = await pictureBox(page)
+  const guideBefore = await boxOf(page, 'path.frame-guide')
+  const vehicleBefore = await boxOf(page, 'path.placement')
+
+  // A drag of the vehicle rather than of the ground.
+  const grab = middleOf(vehicleBefore)
+  await touchDrag(page, grab, { x: grab.x + 70, y: grab.y }, 8)
+  await page.waitForTimeout(300)
+
+  const pictureAfter = await pictureBox(page)
+  const guideAfter = await boxOf(page, 'path.frame-guide')
+  const vehicleAfter = await boxOf(page, 'path.placement')
+
+  // The vehicle went with the finger...
+  expect(Math.abs(middleOf(vehicleAfter).x - grab.x)).toBeGreaterThan(50)
+
+  // ...and the ground did not move under it: same view, same guide, same map.
+  // An edit is a new Layout, and the frame it carries is not a reason to re-fit.
+  expect(Math.abs(pictureAfter.x - pictureBefore.x)).toBeLessThan(2)
+  expect(Math.abs(pictureAfter.y - pictureBefore.y)).toBeLessThan(2)
+  expect(Math.abs(guideAfter.x - guideBefore.x)).toBeLessThan(2)
+  expect(Math.abs(guideAfter.y - guideBefore.y)).toBeLessThan(2)
+  expect(Math.abs(guideAfter.width - guideBefore.width)).toBeLessThan(2)
+  await expect(page.locator('img.leaflet-image-layer[data-survived="yes"]')).toHaveCount(1)
+
+  // Turning it is an edit too, and just as free.
+  await turnTo(page, middleOf(vehicleAfter), 45)
+  await page.waitForTimeout(300)
+
+  const pictureTurned = await pictureBox(page)
+  const guideTurned = await boxOf(page, 'path.frame-guide')
+
+  expect(Math.abs(pictureTurned.x - pictureBefore.x)).toBeLessThan(2)
+  expect(Math.abs(pictureTurned.y - pictureBefore.y)).toBeLessThan(2)
+  expect(Math.abs(guideTurned.x - guideBefore.x)).toBeLessThan(2)
+  expect(Math.abs(guideTurned.y - guideBefore.y)).toBeLessThan(2)
+  expect(Math.abs(guideTurned.width - guideBefore.width)).toBeLessThan(2)
+  await expect(page.locator('img.leaflet-image-layer[data-survived="yes"]')).toHaveCount(1)
 })
 
 test('pans and zooms with two fingers, even when one began on a vehicle', async ({ page }) => {
