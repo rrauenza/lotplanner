@@ -277,9 +277,8 @@
    * Write what is waiting, now.
    *
    * Called when the edits stop arriving, and again when the page is about to be
-   * hidden or thrown away: the phone call this is all for can arrive in the
-   * moment after an edit, and a last moment does exist to write in - local
-   * storage writes synchronously, so this finishes before the page goes.
+   * hidden or thrown away: a last moment does exist to write in - local storage
+   * writes synchronously, so this finishes before the page goes.
    */
   async function write(): Promise<void> {
     const pending = waiting
