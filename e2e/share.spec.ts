@@ -3,7 +3,7 @@ import { expect, test, type Browser, type BrowserContext, type Page } from '@pla
 import { dragFromPalette, middleOfTheMap, openTheSite, serveImagery } from './harness.js'
 
 /**
- * Sharing a Layout as a link, and opening one.
+ * Sharing a Layout or a Collection as a link, and opening one.
  *
  * The link is built in the pure core and tested there; the *compression* is the
  * browser's own `CompressionStream('deflate-raw')`, so this is where the two are

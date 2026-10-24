@@ -6,8 +6,8 @@ status: accepted
 
 A Layout must render for a stranger who received a link and has none of the sender's local
 state, so it embeds its own copies of the Vehicles it uses rather than referencing a Vehicle
-Collection. Collections are local to a browser and are shared as their own artifact. Importing
-either always creates a new Collection and never merges into or overwrites an existing one, and
+Collection. Collections are local to a browser and are shared as their own artifact. Importing a
+Collection always creates a new one and never merges into or overwrites an existing one, and
 promoting a Layout's Vehicles into a Collection is an explicit action.
 
 ## Considered options

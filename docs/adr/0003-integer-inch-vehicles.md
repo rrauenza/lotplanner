@@ -24,8 +24,8 @@ either way, and inches × 0.0254 is the same single multiply as millimetres ÷ 1
 
 ## Consequences
 
-- Every stored dimension is exactly as typed, which is what makes a Collection's content hash
-  trustworthy for duplicate detection.
+- Every stored dimension is exactly as typed, which is what lets a Collection's content hash be a
+  stable duplicate hint — a hint only, never a decision (ADR 0002).
 - Positions are unaffected: floats in the model, quantised separately when a Layout is serialised.
 - **Reopen trigger:** if metric input is ever required, this is the decision to revisit. It is a
   genuine lock-in — saved Collections would need migrating.

@@ -40,8 +40,8 @@ keep in step, and the day they disagree is the day a visitor lands somewhere the
 ## Consequences
 
 - The grammar is a pure function of the fragment, tested in `src/core/route.test.ts`, and the glue that
-  turns a fragment into what a page load _is_ — visitor, creator, a shared Layout, or a polite refusal —
-  is `src/core/arrival.ts`, tested beside it.
+  turns a fragment into what a page load _is_ — visitor, creator, a shared Layout or Collection, or a
+  polite refusal — is `src/core/arrival.ts`, tested beside it.
 - A link made with a newer version of the app opens, decodes, and is refused with a sentence rather than
   silently misread (ADR 0009).
 - A Collection link is recognised and opened: it is _offered_, because opening a link must not change

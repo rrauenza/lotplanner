@@ -4,7 +4,7 @@ status: accepted
 
 # Every shared artifact is versioned before it travels
 
-A Layout and a Vehicle Collection can leave the browser as a link or, later, as a file, and each is
+A Layout and a Vehicle Collection can leave the browser as a link or as a file, and each is
 spelled the same way either way. The payload is compact JSON — arrays rather than objects, so no field
 name is paid for — with every ground position quantised to the centimetre and every angle to a tenth of
 a degree. A link then compresses that text with `deflate-raw` and spells the bytes as unpadded

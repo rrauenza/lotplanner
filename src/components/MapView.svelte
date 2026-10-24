@@ -533,8 +533,10 @@
     // one - so a tracked read of these props recreates the whole map and
     // re-fits the view on every drag, and the ground jumps back to the frame
     // under the finger. One component is mounted per picture (choosing a place
-    // goes through the loading state, which takes the map down), so none of
-    // these four values changes underneath it.
+    // goes through the loading state, which takes the map down), so the plan,
+    // the picture and the origin do not change underneath it. The frame is read
+    // once, when the map is built: opening another Layout of the same place
+    // leaves the guide as it was.
     const created = untrack(() => {
       const map = imageryMap(element, plan, imageUrl, origin, { doubleTapZoom: false })
 

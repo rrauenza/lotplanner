@@ -114,9 +114,10 @@ path.placement.picked-up {
 }
 
 /*
- * The square that stands for a vehicle's colour. Two panels draw one - the
- * palette, and the count of what is already on the ground - so it is shared
- * rather than written twice.
+ * The square that stands for a vehicle's colour. Several panels draw one - the
+ * palette, the count of what is already on the ground, the missing-vehicle
+ * report, the collections sheet, and the offer of a shared collection - so it is
+ * shared rather than written five times.
  */
 .swatch {
   border-radius: 0.125rem;

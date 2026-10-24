@@ -39,8 +39,8 @@ it" is the only workable shape.
   visible; painted stripes are sub-pixel.
 - A Site's first load costs one 15–22 s render, cached thereafter (the service sends
   `cache-control: max-age=43200`). Panning and zooming within a Site cost nothing.
-- Site definitions are a hand-authored manifest — name, coordinates, bounding box, optional
-  alignment offset, optional Site Frame. **Imagery is never committed to the repository.** It is
+- Site definitions are a hand-authored manifest — name, coordinates and an optional Site Frame.
+  **Imagery is never committed to the repository.** It is
   fetched lazily and cached client-side indefinitely in IndexedDB, so a Site works offline after
   its first load. This matters because the app is used standing in a parking lot, and because the
   service intermittently returns 504s.

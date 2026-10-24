@@ -13,8 +13,9 @@ import { dragFromPalette, middleOfTheMap, openTheSite, serveImagery } from './ha
  * appearing for a Layout that needs it, the one action that adopts, and declining
  * leaving a Layout that renders and edits like any other.
  *
- * There is no file or link import yet (#13, #14), so the Layouts here are seeded
- * into storage as an arriving Layout will one day be.
+ * The Layouts here are seeded into storage, which is where an arriving Layout
+ * ends up once it is kept; the import paths themselves are covered in
+ * `files.spec.ts` and `share.spec.ts`.
  */
 
 /** The visitor's own vehicle, which one Layout also uses. */

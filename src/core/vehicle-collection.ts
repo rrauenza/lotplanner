@@ -255,6 +255,12 @@ function freeName(name: string, taken: readonly VehicleCollection[]): string {
  *
  * FNV-1a rather than anything from `crypto`, because the core has no platform
  * APIs and this is not a security boundary.
+ *
+ * Nothing calls this or `samenessHint` yet. They are here because a Collection
+ * import is allowed to offer a duplicate hint (issue #11, ADR 0002) and this is
+ * where that hint would be computed; an import that used it would still fork, so
+ * a wrong hint costs a sentence rather than a decision. If no import ever offers
+ * one, these and their tests can go together.
  */
 export function contentHash(vehicles: readonly Vehicle[]): string {
   const canonical = vehicles
@@ -280,7 +286,7 @@ export function contentHash(vehicles: readonly Vehicle[]): string {
  *
  * A hint to offer someone, never a reason to do anything: `received` has no way
  * to be given one and never consults this, so whatever it says, the arrival is
- * still forked.
+ * still forked. Nothing calls it yet; `contentHash` above says why it is here.
  */
 export function samenessHint(
   mine: readonly VehicleCollection[],

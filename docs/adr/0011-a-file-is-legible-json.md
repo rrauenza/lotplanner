@@ -43,9 +43,9 @@ left with.
   earlier one ignores it.
 - **A zip or another binary container.** Rejected: there is nothing to compress for, and every extra
   layer is one more thing between a person and their work.
-- **Refusing a Collection by file, as a link is refused.** Rejected: a link opens passively and must
-  never change what the recipient has (issue #13); a file is chosen deliberately, so a Collection file
-  is kept — forked, never overwriting (issue #11).
+- **Offering a Collection by file, as a link does.** Rejected: a link opens passively and must never
+  change what the recipient has (issue #13), so its Collection is offered; a file is chosen
+  deliberately, so a Collection file is kept — forked, never overwriting (issue #11).
 
 ## Consequences
 

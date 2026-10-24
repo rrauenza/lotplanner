@@ -22,7 +22,7 @@ import { sameVehicle, type Vehicle } from './vehicle'
  * does not need the manifest to still have that Site in it.
  *
  * Every change below returns a new Layout and leaves the old one exactly as it
- * was. That is the state discipline this ticket establishes: keeping an earlier
+ * was. That is the state discipline the editor relies on: keeping an earlier
  * state costs one reference, so undo is a stack of them rather than a rewrite
  * (ADR 0004). It is why nothing here is a method and nothing is mutated - an
  * earlier state cannot be edited by accident because there is no way to reach it.
@@ -197,13 +197,6 @@ export function withEditedVehicle(layout: Layout, before: Vehicle, after: Vehicl
 }
 
 /**
- * The same Layout with one Placement moved. Nothing else about it changes, not
- * even its angle: moving a vehicle does not turn it.
- *
- * A Placement the caller did not name comes through as the very same object, so
- * an untouched neighbour costs nothing to carry into the next state.
- */
-/**
  * The same Layout with one Placement turned, and nothing else about it changed.
  *
  * Turning is not moving: a vehicle that is turned stays where it is, and a
@@ -218,6 +211,13 @@ export function withRotatedPlacement(layout: Layout, id: string, rotationDegrees
   }
 }
 
+/**
+ * The same Layout with one Placement moved. Nothing else about it changes, not
+ * even its angle: moving a vehicle does not turn it.
+ *
+ * A Placement the caller did not name comes through as the very same object, so
+ * an untouched neighbour costs nothing to carry into the next state.
+ */
 export function withMovedPlacement(layout: Layout, id: string, centre: Offset): Layout {
   return {
     ...layout,
