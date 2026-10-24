@@ -22,7 +22,10 @@ rather than inside it, and a shared link carries the arrangement without a name 
 **The view of a Layout is not the Layout.** The map's viewport, the opacity the placed vehicles
 are drawn at, and the lock that freezes them are ways of looking at the ground rather than
 arrangements on it, so none of them is written down here, and opening a Layout again begins at the
-same view a first visit would.
+same view a first visit would. The one exception is switching, in the same session, to a Layout
+whose frame is the same as the open one's: the ground has not changed, so the view is left where it
+is rather than fitted again, which would move the picture out from under a comparison of two
+options for one place. A reload still begins at the frame, because the viewport is still not saved.
 
 Failure is never fatal. If storage will not be read, or will not be written, the app keeps the work
 in memory, says plainly that nothing will be saved, and carries on: a working tool with no memory
