@@ -432,6 +432,53 @@ test('follows the frame of the Layout that is opened, guide and fit', async ({ p
   expect(Math.abs((mapBox?.height ?? 0) - (second?.height ?? 0) - 32)).toBeLessThan(4)
 })
 
+test('leaves the view where it is when the next Layout has the same frame', async ({ page }) => {
+  // Two Layouts of one place, each carrying its own copy of the same frame: the
+  // common case, and the one where a re-fit would be a nuisance rather than a
+  // correction.
+  await seedLayouts(page, [
+    savedLayout('first', 'Layout 1', SITE_FRAME),
+    savedLayout('second', 'Layout 2', SITE_FRAME),
+  ])
+
+  await serveImagery(page)
+  await openTheSite(page)
+  await expect(page.locator('img.leaflet-image-layer')).toBeVisible()
+
+  const guide = page.locator('path.frame-guide')
+  const map = page.locator('.leaflet-container')
+
+  // Zoomed and panned away from the frame, which is where a comparison between
+  // two Layouts of one place is actually made.
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  await page.getByRole('button', { name: 'Zoom out' }).click()
+  await page.waitForTimeout(400)
+
+  const before = await map.boundingBox()
+  const across = { y: (before?.y ?? 0) + (before?.height ?? 0) / 2 }
+  await touchDrag(
+    page,
+    { x: (before?.x ?? 0) + 200, ...across },
+    { x: (before?.x ?? 0) + 500, ...across },
+  )
+  await page.waitForTimeout(500)
+
+  const asLeft = await guide.boundingBox()
+
+  await openLayouts(page)
+  await layouts(page).getByRole('button', { name: 'Layout 2', exact: true }).click()
+  await page.waitForTimeout(400)
+
+  const after = await guide.boundingBox()
+
+  // The frame is the same, so the guide is already right and the view is left
+  // alone. Switching between two Layouts of one place is comparing them, and a
+  // re-fit on every switch would zoom out from under the comparison.
+  expect(Math.abs((after?.x ?? 0) - (asLeft?.x ?? 0))).toBeLessThan(1)
+  expect(Math.abs((after?.y ?? 0) - (asLeft?.y ?? 0))).toBeLessThan(1)
+  expect(Math.abs((after?.width ?? 0) - (asLeft?.width ?? 0))).toBeLessThan(1)
+})
+
 test('carries on in memory, saying so, when the browser will not keep anything', async ({
   page,
 }) => {
