@@ -26,4 +26,12 @@ export const SITES: readonly Site[] = [
       rotationDegrees: 90,
     },
   },
+  {
+    // 1220 Monterey St, Hollister, CA 95023. Origin is the geocoder's position
+    // for the school; no frame yet, so it opens on the default square until one
+    // is drawn with #create/hollister-high-school.
+    id: 'hollister-high-school',
+    name: 'Hollister High School',
+    origin: { latitude: 36.84082, longitude: -121.40465 },
+  },
 ]
